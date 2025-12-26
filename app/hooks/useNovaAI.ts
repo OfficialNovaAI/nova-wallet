@@ -11,6 +11,24 @@ export interface Message {
   };
 }
 
+export interface TransactionFlow {
+  type: "send" | "receive" | "swap";
+  currentStep: "ready" | "pending" | "completed" | "failed";
+  steps: Array<{
+    step: string;
+    label: string;
+    status: "pending" | "active" | "completed" | "error";
+    message?: string;
+  }>;
+  data: {
+    amount?: string;
+    token?: string;
+    recipient?: string;
+    fromToken?: string;
+    toToken?: string;
+  };
+}
+
 // Mock AI responses for wallet commands
 const getAIResponse = (userMessage: string): { content: string; action?: Message["action"] } => {
   const lower = userMessage.toLowerCase();
