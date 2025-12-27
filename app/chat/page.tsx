@@ -21,7 +21,12 @@ export default function ChatPage() {
     const { messages, isLoading, sendMessage } = useNovaAI();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [inputValue, setInputValue] = useState("");
+    const [isMounted, setIsMounted] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     const pendingTransaction = (() => {
         const lastMessage = messages[messages.length - 1];
@@ -66,6 +71,8 @@ export default function ChatPage() {
     const handleTransactionConfirm = () => {
         toast.success("Transaction submitted!");
     };
+
+    if (!isMounted) return null;
 
     if (!isConnected) {
         return (
