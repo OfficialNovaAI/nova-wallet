@@ -22,6 +22,12 @@ const DEFAULT_CHAIN_ID = 5000; // Mantle Mainnet default
 const chainKeywords: Record<number, string[]> = {
     5000: ["mantle", "mantle mainnet"],
     5003: ["mantle sepolia", "mantle testnet"],
+    84532: ["base sepolia", "base testnet", "base"],
+    11155420: ["optimism sepolia", "op sepolia", "optimism"],
+    4202: ["lisk sepolia", "lisk testnet", "lisk"],
+    421614: ["arbitrum sepolia", "arbitrum"],
+    80002: ["polygon amoy", "amoy", "polygon"],
+    11155111: ["eth sepolia", "sepolia", "ethereum testnet", "sepolia testnet"],
     1: ["ethereum", "mainnet", "eth"],
 };
 

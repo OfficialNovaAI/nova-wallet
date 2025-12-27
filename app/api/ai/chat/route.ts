@@ -3,6 +3,8 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { parseIntent } from "@/lib/intentParser";
 import { isAddress as viemIsAddress } from "viem";
 
+import { supportedChains } from "../../../config/chains";
+
 // GoogleGenerativeAI initialization moved to POST handler
 
 // Function untuk check balance
@@ -20,7 +22,8 @@ async function checkBalance(address: string, chainId: number) {
         );
 
         if (!response.ok) {
-            throw new Error("Gagal mengambil saldo");
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Gagal mengambil saldo");
         }
 
         return await response.json();
@@ -43,7 +46,16 @@ type ChatRequestBody = {
     };
 };
 
-const SYSTEM_PROMPT = `Kamu adalah Nova AI, asisten crypto wallet yang ramah dan membantu (Specialized for Mantle Network). Kamu berbicara dalam Bahasa Indonesia yang natural dan mudah dipahami.
+const SUPPORTED_CHAINS_LIST = supportedChains.map(c => `- ${c.name} (Chain ID: ${c.id})`).join("\n");
+
+const SYSTEM_PROMPT = `Kamu adalah Nova AI, asisten crypto wallet yang ramah dan membantu. Kamu berbicara dalam Bahasa Indonesia yang natural dan mudah dipahami.
+
+Jaringan yang didukung saat ini:
+${SUPPORTED_CHAINS_LIST}
+
+PENTING:
+- Jika user bertanya tentang saldo di chain yang ada di list di atas, kamu BISA mengeceknya.
+- Jika user bertanya tentang chain yang TIDAK ada di list, jelaskan bahwa saat ini belum didukung.
 
 Tugas kamu:
 1. Bantu user cek saldo wallet mereka dengan memanggil function checkBalance ketika user bertanya tentang saldo
@@ -86,24 +98,48 @@ Ingat:
 - Kalau user belum connect wallet, ingatkan mereka untuk connect dulu`;
 
 // Function schema untuk Gemini
-const checkBalanceFunction = {
-    name: "checkBalance",
-    description: "Cek saldo wallet di blockchain tertentu",
-    parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-            address: {
-                type: SchemaType.STRING as const,
-                description: "Alamat wallet yang ingin dicek saldonya",
+const tools = [
+    {
+        name: "checkBalance",
+        description: "Cek saldo wallet di blockchain tertentu",
+        parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+                address: {
+                    type: SchemaType.STRING as const,
+                    description: "Alamat wallet yang ingin dicek saldonya",
+                },
+                chainId: {
+                    type: SchemaType.NUMBER as const,
+                    description: "Chain ID blockchain (contoh: 5000 untuk Mantle Mainnet, 5003 untuk Mantle Sepolia)",
+                },
             },
-            chainId: {
-                type: SchemaType.NUMBER as const,
-                description: "Chain ID blockchain (contoh: 5000 untuk Mantle Mainnet, 5003 untuk Mantle Sepolia)",
-            },
+            required: ["address", "chainId"],
         },
-        required: ["address", "chainId"],
     },
-};
+    {
+        name: "prepareTransaction",
+        description: "Siapkan data transaksi untuk mengirim koin/token dari user ke orang lain. Panggil ini jika user ingin kirim/transfer.",
+        parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+                toAddress: {
+                    type: SchemaType.STRING as const,
+                    description: "Alamat wallet tujuan (harus 0x...)",
+                },
+                amount: {
+                    type: SchemaType.NUMBER as const,
+                    description: "Jumlah yang ingin dikirim (contoh: 0.1)",
+                },
+                chainId: {
+                    type: SchemaType.NUMBER as const,
+                    description: "Chain ID network tujuan",
+                },
+            },
+            required: ["toAddress", "amount", "chainId"],
+        },
+    }
+];
 
 interface PrepareSendParams {
     fromAddress: string;
@@ -185,13 +221,11 @@ async function callGemini(
     messages: ChatRequestBody["messages"],
     tools: any[],
     apiKey: string,
-    modelName: string = "gemini-2.5-flash"
+    modelName: string = "gemma-3-27b-it"
 ) {
     const cleanKey = apiKey.trim();
     const encodedKey = encodeURIComponent(cleanKey);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodedKey}`;
-
-    // console.log("[callGemini] URL Masked:", url.replace(encodedKey, "HIDDEN"));
 
     // Transform messages to Gemini format
     const contents = messages.map(msg => ({
@@ -199,8 +233,9 @@ async function callGemini(
         parts: [{ text: msg.content }]
     }));
 
-    // Add tools config
-    const toolsConfig = tools.length > 0 ? {
+    // Gemma models do not support native tools yet via API
+    const isGemma = modelName.toLowerCase().includes("gemma");
+    const toolsConfig = (!isGemma && tools.length > 0) ? {
         function_declarations: tools
     } : undefined;
 
@@ -247,65 +282,109 @@ export async function POST(request: Request) {
         const lastMessage = body.messages[body.messages.length - 1];
         parsedIntent = parseIntent(lastMessage.content);
 
-        // System Prompt Logic (simplified for brevity, ensuring context is passed)
-        // Note: For multi-turn with history, usually we prepend system instruction or add to history.
-        // Gemimi API supports `system_instruction` field in v1beta.
-
-        // Let's reimplement constraints
         const resolvedChainId = body.walletContext?.chainId ?? parsedIntent.entities.chainId ?? 5003;
-
-        // ... (Intent validation checks similar to before can be kept or simplified)
 
         console.log("[AI API] Processing message:", lastMessage.content);
 
-        // Prepare initial validation response if needed (like GET_BALANCE without wallet)
         if (parsedIntent.intent === "GET_BALANCE" && !body.walletContext?.isConnected) {
             return NextResponse.json({ message: "Hubungkan wallet kamu dulu supaya aku bisa cek saldo di Mantle.", intent: parsedIntent });
         }
 
         // Build System Prompt Context
         let systemInstructionText = SYSTEM_PROMPT;
+
+        // Add ReAct Instructions for Gemma
+        // We always add this for robustness if native tools fail or are disabled
+        systemInstructionText += `
+        
+ATURAN KHUSUS UNTUK MEMANGGIL FUNCTION (TOOL CALLING):
+Kamu memiliki akses ke tools berikut:
+1. checkBalance(address: string, chainId: number) - Cek saldo wallet.
+2. prepareTransaction(toAddress: string, amount: number, chainId: number) - Siapkan transaksi kirim uang.
+
+JIKA user meminta sesuatu yang membutuhkan tool tersebut (misal: "cek saldo", "kirim token"), JANGAN LANGSUNG MENJAWAB.
+Sebaliknya, keluarkan output JSON valid di dalam blok kode \`\`\`json\`\`\` seperti ini:
+
+\`\`\`json
+{
+  "tool": "checkBalance",
+  "args": {
+    "address": "0x...",
+    "chainId": 5003
+  }
+}
+\`\`\`
+
+Atau untuk transaksi:
+\`\`\`json
+{
+  "tool": "prepareTransaction",
+  "args": {
+    "toAddress": "0x...",
+    "amount": 0.1,
+    "chainId": 5003
+  }
+}
+\`\`\`
+
+Tunggu user (system) memberikan hasil eksekusi tool tersebut sebelum menjawab final.
+`;
+
         if (body.walletContext?.isConnected) {
             systemInstructionText += `\n\nContext Wallet: Address=${body.walletContext.address}, Chain=${body.walletContext.chainId}`;
         }
 
-        // We will prepend system prompt as the first message or use system_instruction if valid. 
-        // Safer to just prepend to the first user message or keep it as context. 
-        // Let's modify the `callGemini` to handle this? Or just prepend here.
-
-        // Actually, just creating a new message array with the system prompt context as the first user part is robust.
         const augmentedMessages = [...body.messages];
-        // Inject system prompt into the last message or first? 
-        // Best practice: Prepend a "user" message with system instructions if "system" role isn't supported in standard messages.
-        // Or better: Append context to the *last* message content.
         augmentedMessages[augmentedMessages.length - 1].content = `${systemInstructionText}\n\nUser Question: ${lastMessage.content}`;
 
         // Initial Call
         let geminiResponse = await callGemini(
             augmentedMessages,
-            [checkBalanceFunction],
-            apiKey
+            tools,
+            apiKey,
+            "gemma-3-27b-it" // Explicitly using user's choice
         );
 
         let candidate = geminiResponse.candidates?.[0];
         let parts = candidate?.content?.parts || [];
+        let transactionPreviewData: any = null;
 
-        // Function Calling Loop
-        // Note: Manual loop implementation. 
-        // 1. Check for functionCall in parts.
-        // 2. If present, execute, append result to history, call API again.
+        // Function Calling Logic (Hybrid: Native + Text Parse)
+        let functionCallData = null;
+        let functionCallPart = parts.find((p: any) => p.functionCall);
 
-        // For simplicity in this fix, let's look for the *first* function call.
-        // Real implementation should handle multiple.
-
-        const functionCallPart = parts.find((p: any) => p.functionCall);
-
+        // 1. Try Native Function Call
         if (functionCallPart) {
-            const fnCall = functionCallPart.functionCall;
-            console.log("[AI API] Function Call:", fnCall.name);
+            functionCallData = {
+                name: functionCallPart.functionCall.name,
+                args: functionCallPart.functionCall.args
+            };
+        }
+        // 2. Try Text-based JSON parsing (for Gemma)
+        else {
+            const fullText = parts.map((p: any) => p.text).join("");
+            const jsonMatch = fullText.match(/```json\s*({[\s\S]*?})\s*```/);
+            if (jsonMatch) {
+                try {
+                    const parsed = JSON.parse(jsonMatch[1]);
+                    if (parsed.tool && parsed.args) {
+                        console.log("[AI API] Detected Text-based Tool Call:", parsed.tool);
+                        functionCallData = {
+                            name: parsed.tool,
+                            args: parsed.args
+                        };
+                    }
+                } catch (e) {
+                    console.log("[AI API] JSON Parse Error in ReAct:", e);
+                }
+            }
+        }
 
-            if (fnCall.name === "checkBalance") {
-                const args = fnCall.args;
+        if (functionCallData) {
+            const { name, args } = functionCallData;
+            console.log("[AI API] Executing Function:", name);
+
+            if (name === "checkBalance") {
                 const targetAddress = args.address ?? body.walletContext?.address;
                 const targetChainId = args.chainId ?? resolvedChainId;
 
@@ -320,74 +399,78 @@ export async function POST(request: Request) {
                     }
                 }
 
-                // We need to send this result back to Gemini.
-                // Construct the "function_response" message.
-                // Note: The history must now include the ASSISTANT's tool_use message, then the USER's tool_response.
+                const followUpContent = `System: Result of tool ${name}: ${JSON.stringify(functionResult)}. usage_metadata: { matches: ${functionResult.comparison?.matches} }. Explain this to user.`;
+                augmentedMessages.push({ role: "assistant", content: "" }); // Dummy assistant msg to maintain turn order if needed, or better:
+                // Actually, for ReAct, we treat the previous response (with the JSON) as the assistant's turn.
+                // We should append the assistant's request message.
+                // But `augmentedMessages` is just the input array.
+                // We need to simulate: User -> Assistant (JSON request) -> User (System Result) -> Assistant (Final Answer)
 
-                // History update:
-                // 1. Assistant message with functionCall
-                const assistantToolMsg = {
-                    role: "model",
-                    parts: [{ functionCall: fnCall }] // Raw structure required?
-                };
-
-                // 2. User (or function) message with response
-                // v1beta format: role: "function", parts: [{ functionResponse: ... }]
-                // Wait, role "user" or "function"? Valid roles are "user" and "model".
-                // Actually v1beta uses "function" role or "user" role with specific part?
-                // Let's stick to the simplest: Add to user message? No.
-
-                // Correct v1beta flow:
-                // Model: parts: [{ functionCall: ... }]
-                // User: parts: [{ functionResponse: { name: ..., response: ... } }]
-
-                // We need to reconstruct the messages array for the 2nd call.
-                // Since we handled existing messages, we just append to `augmentedMessages`.
-                // Actually, `callGemini` transforms them. We need to pass raw objects that callGemini understands.
-                // Let's hack: callGemini expects {role, content}. 
-                // We need to update callGemini to accept complex parts or just handle the raw parts.
-
-                // REFACTOR: Let's simply return the result text manually for now to break the loop safely,
-                // OR do one properly structured recursive call.
-
-                // Simplified Strategy:
-                // Just return the balance data as text to the user? No, we want the AI to interpret it.
-                // Let's do a second simple prompt with the data.
-
-                const followUpContent = `System: Here is the result of checkBalance: ${JSON.stringify(functionResult)}. Please explain this to the user in Bahasa Indonesia contextually.`;
-
-                augmentedMessages.push({ role: "assistant", content: "" }); // Placeholder for the tool call (skip internal detail)
+                // For native tools, Gemini handles 'function_response'. For text, we allow normal turns.
+                augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
                 augmentedMessages.push({ role: "user", content: followUpContent });
 
-                // Final answer generation
                 geminiResponse = await callGemini(
                     augmentedMessages,
-                    [], // No tools needed for summary
-                    apiKey
+                    [], // No tools needed for follow up usually, or keep them if multi-step
+                    apiKey,
+                    "gemma-3-27b-it"
                 );
 
-                candidate = geminiResponse.candidates?.[0];
-                parts = candidate?.content?.parts || [];
+            } else if (name === "prepareTransaction") {
+                if (!body.walletContext?.isConnected) {
+                    const followUpContent = `System: User is not connected. Tell them to connect wallet first.`;
+                    augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                    augmentedMessages.push({ role: "user", content: followUpContent });
+                    geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                } else {
+                    const fromAddress = body.walletContext.address;
+                    const result = await prepareSendTransaction({
+                        fromAddress,
+                        toAddress: args.toAddress,
+                        amount: args.amount,
+                        chainId: args.chainId
+                    });
+
+                    if (result.success) {
+                        transactionPreviewData = result;
+                        const followUpContent = `System: Transaction prepared. Preview: ${JSON.stringify(result.preview)}. Ask user to confirm.`;
+                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                        augmentedMessages.push({ role: "user", content: followUpContent });
+                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                    } else {
+                        const followUpContent = `System: Failed. Issues: ${result.validations.issues.join(", ")}. Explain to user.`;
+                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                        augmentedMessages.push({ role: "user", content: followUpContent });
+                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                    }
+                }
             }
+
+            // Re-fetch parts
+            candidate = geminiResponse.candidates?.[0];
+            parts = candidate?.content?.parts || [];
         }
 
         const finalText = parts.map((p: any) => p.text).join("");
+        // Clean up JSON block from final text if it was the tool call itself? 
+        // Actually, the FINAL text comes from the SECOND call (after system result), which should be natural language.
+        // The FIRST call (with JSON) was pushed to history.
 
         return NextResponse.json({
             message: finalText,
             intent: parsedIntent,
+            transactionPreview: transactionPreviewData,
         });
 
     } catch (error: any) {
         console.error("[AI API] Manual Fetch Error:", error);
-
-        // Use default intent if parsedIntent is not available (e.g. crash before parsing)
         const safeIntent = parsedIntent || { intent: "UNKNOWN", confidence: 0, entities: {} };
         const isConnected = !!body?.walletContext?.isConnected;
 
         const fallbackMessage = isConnected
-            ? `Halo! Saya Nova AI. Maaf, ada kendala sistem. Error: ${error.message}. Cek saldo manual tersedia.`
-            : `Halo! Saya Nova AI. Silakan hubungkan wallet. (Error: ${error.message})`;
+            ? `Halo! Saya Nova AI (Gemma). Maaf, ada kendala sistem. Error: ${error.message}.`
+            : `Halo! Saya Nova AI (Gemma). Silakan hubungkan wallet. (Error: ${error.message})`;
 
         return NextResponse.json({
             message: fallbackMessage,

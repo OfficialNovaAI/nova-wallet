@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { supportedChains } from "../../../config/chains";
 import {
     createPublicClient,
     formatEther,
@@ -7,41 +8,34 @@ import {
     type Hex,
 } from "viem";
 import type { Chain } from "viem/chains";
-import {
-    mantle,
-    mantleSepoliaTestnet,
-    mainnet,
-} from "viem/chains";
+import * as viemChains from "viem/chains";
 
 type BalanceRequestBody = {
     address: Hex;
     chainId: number;
 };
 
-const supportedChains: Chain[] = [
-    mantle,
-    mantleSepoliaTestnet,
-    mainnet,
-];
-
-const chainMap: Record<number, Chain> = supportedChains.reduce(
+// Create a map of all available chains from viem
+const ALL_CHAINS: Record<number, Chain> = Object.values(viemChains).reduce(
     (acc, chain) => {
-        acc[chain.id] = chain;
+        if (chain && chain.id) {
+            acc[chain.id] = chain;
+        }
         return acc;
     },
     {} as Record<number, Chain>,
 );
 
 const rpcOverride: Record<number, string | undefined> = {
-    [mainnet.id]:
+    [viemChains.mainnet.id]:
         process.env.NEXT_PUBLIC_MAINNET_RPC ?? process.env.MAINNET_RPC,
-    [mantle.id]:
+    [viemChains.mantle.id]:
         process.env.NEXT_PUBLIC_MANTLE_RPC ?? process.env.MANTLE_RPC,
-    [mantleSepoliaTestnet.id]:
+    [viemChains.mantleSepoliaTestnet.id]:
         process.env.NEXT_PUBLIC_MANTLE_SEPOLIA_RPC ?? process.env.MANTLE_SEPOLIA_RPC,
 };
 
-const getChain = (chainId: number) => chainMap[chainId];
+const getChain = (chainId: number) => ALL_CHAINS[chainId];
 
 export async function POST(request: Request) {
     try {
@@ -89,12 +83,12 @@ export async function POST(request: Request) {
 
         const balanceEth = formatEther(balanceWei);
 
-        // Determine token symbol based on chain
-        const isMantle = chain.id === mantle.id || chain.id === mantleSepoliaTestnet.id;
-        const tokenSymbol = isMantle ? "MNT" : "ETH";
-        const tokenName = isMantle
-            ? "MNT (Mantle native token)"
-            : "ETH (Ethereum native token)";
+        // Determine token symbol based on chain config or fallback
+        const chainConfig = supportedChains.find(c => c.id === chain.id);
+        const tokenSymbol = chainConfig?.symbol || ((chain.id === viemChains.mantle.id || chain.id === viemChains.mantleSepoliaTestnet.id) ? "MNT" : "ETH");
+        const tokenName = chainConfig
+            ? `${tokenSymbol} (Native token of ${chainConfig.name})`
+            : (tokenSymbol === "MNT" ? "MNT (Mantle native token)" : "ETH (Ethereum native token)");
 
         return NextResponse.json({
             address: body.address,

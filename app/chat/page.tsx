@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useSendTransaction } from "wagmi";
+import { parseEther } from "viem";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatMessage } from "@/components/chat/ChatMessage";
@@ -19,6 +20,7 @@ export default function ChatPage() {
     const { isConnected, address } = useAccount();
     const { openConnectModal } = useConnectModal();
     const { messages, isLoading, sendMessage } = useNovaAI();
+    const { sendTransaction, isPending: isTxPending } = useSendTransaction();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [inputValue, setInputValue] = useState("");
     const [isMounted, setIsMounted] = useState(false);
@@ -69,7 +71,34 @@ export default function ChatPage() {
     };
 
     const handleTransactionConfirm = () => {
-        toast.success("Transaction submitted!");
+        if (!pendingTransaction || pendingTransaction.type !== "send") return;
+
+        const { recipient, amount } = pendingTransaction.data;
+        if (!recipient || !amount) {
+            toast.error("Invalid transaction data");
+            return;
+        }
+
+        try {
+            sendTransaction({
+                to: recipient as `0x${string}`,
+                value: parseEther(amount),
+            }, {
+                onSuccess: (hash) => {
+                    toast.success("Transaction submitted!", {
+                        description: `Hash: ${hash.slice(0, 10)}...${hash.slice(-8)}`
+                    });
+                    // Optional: tell AI about success
+                },
+                onError: (error) => {
+                    toast.error("Transaction failed", {
+                        description: error.message
+                    });
+                }
+            });
+        } catch (error: any) {
+            toast.error("Error preparing transaction", { description: error.message });
+        }
     };
 
     if (!isMounted) return null;

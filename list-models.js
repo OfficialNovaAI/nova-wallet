@@ -17,9 +17,7 @@ async function listModels() {
         if (data.models) {
             console.log("Available Models:");
             data.models.forEach(m => {
-                if (m.name.includes("flash") || m.name.includes("pro")) {
-                    console.log(`- ${m.name} (Supported: ${m.supportedGenerationMethods})`);
-                }
+                console.log(`- ${m.name} (Supported: ${m.supportedGenerationMethods})`);
             });
         } else {
             console.log("No models found or error:", data);
