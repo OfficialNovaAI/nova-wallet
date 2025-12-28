@@ -5,7 +5,7 @@
   --color-nova-purple-light: #d9b3ff;
   --color-nova-purple-glow: #9933ff;
   --color-nova-violet: #a366ff;
-  
+
   --radius: 0.5rem;
 }
 
@@ -89,12 +89,15 @@
   .receive-bg {
     background: radial-gradient(circle at 100% 0%, rgba(255, 184, 106, 0.4) 0%, rgba(253, 165, 213, 0.3) 30%, rgba(218, 178, 255, 0.2) 50%, transparent 70%);
   }
+
   .swap-bg {
     background: radial-gradient(circle at 100% 0%, rgba(142, 197, 255, 0.3) 0%, rgba(218, 178, 255, 0.25) 30%, rgba(253, 165, 213, 0.2) 50%, transparent 70%);
   }
+
   .paylink-bg {
     background: radial-gradient(circle at 100% 0%, rgba(218, 178, 255, 0.4) 0%, rgba(142, 197, 255, 0.3) 30%, rgba(83, 234, 253, 0.2) 50%, transparent 70%);
   }
+
   .send-bg {
     background: radial-gradient(circle at 100% 0%, rgba(255, 223, 32, 0.4) 0%, rgba(255, 184, 106, 0.3) 30%, rgba(253, 165, 213, 0.2) 50%, transparent 70%);
   }
@@ -103,12 +106,15 @@
   .receive-logo {
     background: linear-gradient(135deg, #FFB86A 0%, #FDA5D5 50%, #DAB2FF 100%);
   }
+
   .swap-logo {
     background: linear-gradient(135deg, #8EC5FF 0%, #DAB2FF 50%, #FDA5D5 100%);
   }
+
   .paylink-logo {
     background: linear-gradient(135deg, #DAB2FF 0%, #8EC5FF 50%, #53EAFD 100%);
   }
+
   .send-logo {
     background: linear-gradient(135deg, #FFB86A 0%, #FFDF20 50%, #FDA5D5 100%);
   }
@@ -116,16 +122,18 @@
   /** CHAT LOGO **/
   .chat-logo {
     background: linear-gradient(225.82deg, rgba(140, 132, 251, 0.4) 0%, rgba(54, 54, 201, 0.4) 98.6%),
-                linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1));
+      linear-gradient(0deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1));
     backdrop-filter: blur(8.68px);
     border: 0.72px solid rgba(255, 255, 255, 0.2);
     box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
   }
+
   .chat-logo-behind {
     background: linear-gradient(135deg, #7069EC 0%, #5753DF 100%);
     box-shadow: 0px 0px 2.89px 0px #8C84FB inset;
     box-shadow: 0.72px 0.72px 5.42px 0px #FFFFFF33 inset;
   }
+
   .zap-style {
     background: linear-gradient(180deg, #E9E2FE 0%, #A692FA 50%, #4937B2 100%);
     border: 1.67px solid;
@@ -134,11 +142,11 @@
 
   /** BUBBLE CHAT **/
   .bubble-chat {
-   background: linear-gradient(180deg, #7768CA 0%, #5341B8 100%);
-   box-shadow: 0px 1px 3px 0px #0000001A;
-   box-shadow: 0px -1px 0px 0px #3E318A inset;
-   box-shadow: 0px 1px 0.75px 0px #FFFFFF1F inset;
-   box-shadow: 0px 0px 0px 1px #423493;
+    background: linear-gradient(180deg, #7768CA 0%, #5341B8 100%);
+    box-shadow: 0px 1px 3px 0px #0000001A;
+    box-shadow: 0px -1px 0px 0px #3E318A inset;
+    box-shadow: 0px 1px 0.75px 0px #FFFFFF1F inset;
+    box-shadow: 0px 0px 0px 1px #423493;
   }
 }
 
@@ -149,4 +157,112 @@
 body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
+}
+
+/* ========================================
+   CopilotKit Custom Styling - Nova Theme
+   ======================================== */
+
+/* Override CopilotKit CSS Variables */
+[data-copilot-kit],
+.copilotKitChat,
+.copilotKitMessages,
+.copilotKitInput {
+  --copilot-kit-primary-color: hsl(270 100% 70%);
+  --copilot-kit-contrast-color: white;
+  --copilot-kit-background-color: hsl(var(--background));
+  --copilot-kit-secondary-color: hsl(var(--card));
+  --copilot-kit-secondary-contrast-color: hsl(var(--foreground));
+  --copilot-kit-separator-color: hsl(var(--border));
+  --copilot-kit-muted-color: hsl(var(--muted-foreground));
+}
+
+/* Hide default CopilotKit header (we have custom ChatHeader) */
+.copilotKitHeader,
+[class*="copilotKitHeader"],
+[class*="Header"]>[class*="copilot"] {
+  display: none !important;
+}
+
+/* CRITICAL: Make chat container fill available space with proper constraints */
+.copilotKitChat,
+[class*="copilotKit"][class*="Chat"],
+main>div[class*="copilot"] {
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border: none !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+}
+
+/* CRITICAL: Messages area must scroll and not grow infinitely */
+.copilotKitMessages,
+[class*="copilotKit"][class*="Messages"],
+[class*="copilot"] [class*="messages"],
+[class*="copilot"] [class*="Messages"] {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 1rem !important;
+}
+
+/* Style user messages with Nova gradient */
+.copilotKitMessage[data-role="user"],
+[class*="copilotKitUserMessage"] {
+  background: linear-gradient(135deg, hsl(270 100% 70%), hsl(280 100% 60%)) !important;
+  color: white !important;
+  border-radius: 1rem !important;
+  padding: 0.75rem 1rem !important;
+  max-width: 80% !important;
+  margin-left: auto !important;
+}
+
+/* Style AI messages */
+.copilotKitMessage[data-role="assistant"],
+[class*="copilotKitAssistantMessage"] {
+  background: hsl(var(--muted)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-radius: 1rem !important;
+  padding: 0.75rem 1rem !important;
+  max-width: 80% !important;
+}
+
+/* Input area styling */
+.copilotKitInput,
+[class*="copilotKitInput"] {
+  border-top: 1px solid hsl(var(--border)) !important;
+  background: hsl(var(--background)) !important;
+  padding: 1rem !important;
+}
+
+.copilotKitInput textarea,
+.copilotKitInput input {
+  background: hsl(var(--muted)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 0.75rem !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.copilotKitInput textarea:focus,
+.copilotKitInput input:focus {
+  border-color: hsl(270 100% 70%) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px hsl(270 100% 70% / 0.2) !important;
+}
+
+/* Send button styling */
+.copilotKitSendButton,
+[class*="copilotKitSendButton"] {
+  background: linear-gradient(135deg, hsl(270 100% 70%), hsl(280 100% 60%)) !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  color: white !important;
+}
+
+.copilotKitSendButton:hover {
+  opacity: 0.9 !important;
 }

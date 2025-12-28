@@ -1,10 +1,8 @@
-
 import { NextRequest } from "next/server";
-import { CopilotRuntime, GoogleGenerativeAIAdapter, copilotRuntimeNextJSAppRouterEndpoint } from "@copilotkit/runtime";
+import { CopilotRuntime, OpenAIAdapter, copilotRuntimeNextJSAppRouterEndpoint } from "@copilotkit/runtime";
 
-const serviceAdapter = new GoogleGenerativeAIAdapter({
-    apiKey: process.env.GEMINI_API_KEY || "",
-    model: "gemma-3-27b-it",
+const serviceAdapter = new OpenAIAdapter({
+    model: "gpt-4o-mini",
 });
 
 const runtime = new CopilotRuntime();
