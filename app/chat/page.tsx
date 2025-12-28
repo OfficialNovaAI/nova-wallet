@@ -9,6 +9,9 @@ import { TokenSidebar } from "@/components/chat/TokenSidebar";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { TransactionCard } from "@/components/chat/TransactionCard";
 import { InfoCard } from "@/components/chat/InfoCard";
+import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
+import { CustomAIMessage } from "@/components/chat/CustomAIMessage";
+import { CustomChatInput } from "@/components/chat/CustomChatInput";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Wallet } from "lucide-react";
@@ -262,6 +265,11 @@ function ChatPageContent() {
 
                 {/* CopilotKit Chat UI */}
                 <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    {/* Chat Status Header */}
+                    <div className="text-center py-3 text-gray-400 text-sm">
+                        Right now you&apos;re in chat with Nova AI
+                    </div>
+
                     <CopilotChat
                         className="flex-1 min-h-0 overflow-hidden"
                         labels={{
@@ -269,6 +277,9 @@ function ChatPageContent() {
                             initial: "Halo! Saya Nova AI, asisten crypto wallet kamu. Saya bisa bantu cek saldo, kirim crypto, dan menjawab pertanyaan tentang blockchain. Mau aku bantu apa hari ini?",
                             placeholder: "Tanya Nova AI tentang wallet atau crypto...",
                         }}
+                        UserMessage={CustomUserMessage}
+                        AssistantMessage={CustomAIMessage}
+                        Input={CustomChatInput}
                         instructions={`Kamu adalah Nova AI, asisten crypto wallet yang ramah dan helpful. Selalu gunakan Bahasa Indonesia.
 
 TOOLS YANG TERSEDIA:
