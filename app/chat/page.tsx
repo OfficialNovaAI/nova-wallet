@@ -8,6 +8,8 @@ import { ChatHeader } from "@/components/chat/ChatHeader";
 import { TokenSidebar } from "@/components/chat/TokenSidebar";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { TransactionCard } from "@/components/chat/TransactionCard";
+import { BalanceCard } from "@/components/chat/BalanceCard";
+import { MultiChainBalanceCard } from "@/components/chat/MultiChainBalanceCard";
 import { InfoCard } from "@/components/chat/InfoCard";
 import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
@@ -43,10 +45,16 @@ function ChatPageContent() {
         data: any;
     } | null>(null);
 
-    // Register CopilotKit Actions for Function Calling
+    // State to store balance data for Generative UI
+    const [balanceData, setBalanceData] = useState<{
+        balance: string;
+        tokenSymbol: string;
+        chainName: string;
+    } | null>(null);
+
     useCopilotAction({
         name: "checkBalance",
-        description: "Check the user's wallet balance on a specific blockchain network",
+        description: "Cek saldo wallet user di blockchain tertentu. Gunakan ini ketika user mau tahu saldo mereka, cek balance, atau lihat berapa crypto yang dimiliki.",
         parameters: [
             { name: "chainId", type: "number", description: "The chain ID to check balance on (e.g., 5000 for Mantle Mainnet, 5003 for Mantle Sepolia)", required: false },
         ],
@@ -65,14 +73,131 @@ function ChatPageContent() {
 
                 if (!response.ok) {
                     const error = await response.json();
+                    setBalanceData(null);
                     return `Error checking balance: ${error.error || "Unknown error"}`;
                 }
 
                 const data = await response.json();
-                return `Balance: ${data.balanceEth} ${data.tokenSymbol} on ${data.formattedChainName}`;
+                setBalanceData({
+                    balance: data.balanceEth,
+                    tokenSymbol: data.tokenSymbol,
+                    chainName: data.formattedChainName,
+                });
+                return `Saldo user: ${data.balanceEth} ${data.tokenSymbol} di ${data.formattedChainName}. Card balance sudah ditampilkan.`;
             } catch (error: any) {
+                setBalanceData(null);
                 return `Error: ${error.message}`;
             }
+        },
+        render: ({ status }) => {
+            if (status === "executing") {
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-purple-50 rounded-xl border border-purple-100 max-w-sm mt-3">
+                        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                        <span className="text-sm text-purple-700">Checking balance...</span>
+                    </div>
+                );
+            }
+            if (status === "complete" && balanceData && address) {
+                return (
+                    <BalanceCard
+                        balance={balanceData.balance}
+                        tokenSymbol={balanceData.tokenSymbol}
+                        chainName={balanceData.chainName}
+                        address={address}
+                    />
+                );
+            }
+            return <></>;
+        },
+    });
+
+    // State for multi-chain balances
+    const [multiChainBalances, setMultiChainBalances] = useState<{
+        chainName: string;
+        balance: string;
+        symbol: string;
+    }[] | null>(null);
+
+    useCopilotAction({
+        name: "checkAllBalances",
+        description: "Cek saldo wallet user di SEMUA chain yang tersedia sekaligus. Gunakan ini ketika user mau lihat semua saldo, cek portfolio, atau lihat balance di setiap chain.",
+        handler: async () => {
+            if (!isConnected || !address) {
+                return "User wallet is not connected. Please ask the user to connect their wallet first.";
+            }
+
+            try {
+                // Fetch balances from all supported chains
+                const chainIds = [11155111, 5003, 84532, 11155420, 4202, 80002, 421614];
+                const balancePromises = chainIds.map(async (cid) => {
+                    try {
+                        const response = await fetch("/api/wallet/balance", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ address, chainId: cid }),
+                        });
+                        if (response.ok) {
+                            const data = await response.json();
+                            return {
+                                chainName: data.formattedChainName,
+                                balance: data.balanceEth,
+                                symbol: data.tokenSymbol,
+                            };
+                        }
+                        return null;
+                    } catch {
+                        return null;
+                    }
+                });
+
+                const results = await Promise.all(balancePromises);
+                const validBalances = results.filter((b): b is NonNullable<typeof b> => b !== null);
+
+                setMultiChainBalances(validBalances);
+
+                const nonZero = validBalances.filter(b => parseFloat(b.balance) > 0);
+                return `Berhasil mengambil saldo dari ${validBalances.length} chains. ${nonZero.length} chains memiliki saldo > 0. Lihat card portfolio di atas.`;
+            } catch (error: any) {
+                setMultiChainBalances(null);
+                return `Error: ${error.message}`;
+            }
+        },
+        render: ({ status }) => {
+            if (status === "executing") {
+                return (
+                    <div className="bg-white rounded-2xl border border-gray-200 p-6 max-w-md mt-3 shadow-lg">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 
+                                          flex items-center justify-center animate-pulse">
+                                <Wallet className="w-6 h-6 text-white" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-gray-900">Checking all chains...</p>
+                                <p className="text-sm text-gray-500">Fetching balances from 7 networks</p>
+                            </div>
+                        </div>
+                        <div className="mt-4 grid grid-cols-7 gap-1">
+                            {[...Array(7)].map((_, i) => (
+                                <div
+                                    key={i}
+                                    className="h-1.5 rounded-full bg-purple-200 animate-pulse"
+                                    style={{ animationDelay: `${i * 100}ms` }}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
+            if (status === "complete" && multiChainBalances && address) {
+                return (
+                    <MultiChainBalanceCard
+                        balances={multiChainBalances}
+                        address={address}
+                    />
+                );
+            }
+            return <></>;
         },
     });
 
@@ -154,31 +279,30 @@ function ChatPageContent() {
 
     useCopilotAction({
         name: "showReceiveAddress",
-        description: "Show the user's wallet address for receiving crypto",
+        description: "Tampilkan alamat wallet user dengan QR code untuk menerima crypto. Gunakan ini ketika user ingin menerima token, melihat alamat wallet mereka, meminta QR code, atau share address.",
         handler: async () => {
             if (!isConnected || !address) {
                 return "User wallet is not connected. Please ask the user to connect their wallet first.";
             }
 
-            setPendingTransaction({
-                type: "receive",
-                data: { token: "MNT", address }
-            });
-
-            return `User's wallet address: ${address}. A QR code has been displayed for easy sharing.`;
+            return `Alamat wallet user: ${address}. QR code dan tombol copy sudah ditampilkan di atas.`;
         },
         render: ({ status }) => {
-            if (status === "complete" && pendingTransaction?.type === "receive") {
+            // Always show the receive card when action is complete
+            if (status === "complete" && address) {
                 return (
                     <TransactionCard
                         type="receive"
                         data={{
-                            address: address || "0x...",
+                            address: address,
                             token: "MNT",
                         }}
-                        onClose={() => setPendingTransaction(null)}
+                        onClose={() => { }}
                     />
                 );
+            }
+            if (status === "executing") {
+                return <div className="text-muted-foreground text-sm">Generating QR code...</div>;
             }
             return <></>;
         },

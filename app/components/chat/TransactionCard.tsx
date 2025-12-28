@@ -90,13 +90,17 @@ export const TransactionCard = (props: TransactionCardProps) => {
         <div className="flex gap-3 mt-6">
           <Button
             variant="outline"
-            className="flex-1"
+            className="flex-1 border-2 border-gray-300 text-gray-700 font-medium 
+                       hover:bg-gray-100 hover:border-gray-400 hover:text-gray-900
+                       active:scale-95 transition-all duration-200"
             onClick={props.onCancel}
           >
             Cancel
           </Button>
           <Button
-            className="flex-1 nova-gradient bubble-chat"
+            className="flex-1 bg-gradient-to-r from-purple-500 to-violet-600 text-white font-medium
+                       hover:from-purple-600 hover:to-violet-700 hover:shadow-lg hover:shadow-purple-500/30
+                       active:scale-95 transition-all duration-200"
             onClick={props.onConfirm}
           >
             Send Confirm
@@ -154,7 +158,9 @@ export const TransactionCard = (props: TransactionCardProps) => {
 
         <Button
           variant="outline"
-          className="w-full"
+          className="w-full border-2 border-gray-300 text-gray-700 font-medium 
+                     hover:bg-gray-100 hover:border-gray-400 hover:text-gray-900
+                     active:scale-95 transition-all duration-200"
           onClick={props.onClose}
         >
           Close
@@ -186,13 +192,17 @@ export const TransactionCard = (props: TransactionCardProps) => {
         <div className="flex gap-3 mt-6">
           <Button
             variant="outline"
-            className="flex-1"
+            className="flex-1 border-2 border-gray-300 text-gray-700 font-medium 
+                       hover:bg-gray-100 hover:border-gray-400 hover:text-gray-900
+                       active:scale-95 transition-all duration-200"
             onClick={props.onCancel}
           >
             Cancel
           </Button>
           <Button
-            className="flex-1  bubble-chat"
+            className="flex-1 bg-gradient-to-r from-purple-500 to-violet-600 text-white font-medium
+                       hover:from-purple-600 hover:to-violet-700 hover:shadow-lg hover:shadow-purple-500/30
+                       active:scale-95 transition-all duration-200"
             onClick={props.onConfirm}
           >
             Confirm Swap
