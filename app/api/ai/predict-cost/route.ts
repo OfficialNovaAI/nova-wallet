@@ -13,7 +13,7 @@ export async function POST(request: Request) {
             );
         }
 
-        const externalApiUrl = "https://web-production-97230.up.railway.app/predict";
+        const externalApiUrl = "https://wildanniam-slippagepredictoronchain.hf.space/predict";
 
         const response = await fetch(externalApiUrl, {
             method: "POST",

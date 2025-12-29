@@ -15,19 +15,19 @@ AI-powered Trade Execution Cost Predictor API yang memprediksi **total biaya rea
 
 ## Base URL
 ```
-https://web-production-97230.up.railway.app
+https://wildanniam-slippagepredictoronchain.hf.space
 ```
 
 ## Quick Start
 
 ### 1. Health Check
 ```bash
-curl https://web-production-97230.up.railway.app/health
+curl https://wildanniam-slippagepredictoronchain.hf.space/health
 ```
 
 ### 2. Get Predictions
 ```bash
-curl -X POST https://web-production-97230.up.railway.app/predict \
+curl -X POST https://wildanniam-slippagepredictoronchain.hf.space/predict \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "BTC/USDT",
@@ -38,7 +38,7 @@ curl -X POST https://web-production-97230.up.railway.app/predict \
 
 ### 3. Compare Exchanges
 ```bash
-curl -X POST https://web-production-97230.up.railway.app/compare \
+curl -X POST https://wildanniam-slippagepredictoronchain.hf.space/compare \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "ETH/USDT",
@@ -82,7 +82,7 @@ curl -X POST https://web-production-97230.up.railway.app/compare \
 
 ### JavaScript
 ```javascript
-const response = await fetch('https://web-production-97230.up.railway.app/predict', {
+const response = await fetch('https://wildanniam-slippagepredictoronchain.hf.space/predict', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -101,7 +101,7 @@ console.log('Best exchange:', data.best_venue);
 import requests
 
 response = requests.post(
-    'https://web-production-97230.up.railway.app/predict',
+    'https://wildanniam-slippagepredictoronchain.hf.space/predict',
     json={'symbol': 'BTC/USDT', 'amount': 1.0, 'side': 'sell'}
 )
 
@@ -123,3 +123,4 @@ print(f"Total cost: ${data['quotes'][0]['total_cost']:,.2f}")
 - Kraken
 - Coinbase
 - OKX
+
