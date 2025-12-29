@@ -349,7 +349,24 @@ function ChatPageContent() {
                 return `Prediction complete. View the card above.`;
             } catch (error: any) {
                 console.error("🔥 predictTradeCost error:", error);
-                return `Error analyzing trade: ${error.message}`;
+
+                // Fallback Mock Data if API fails (for demo/resilience)
+                const mockQuotes = [
+                    { exchange: "binance", quote_price: 98000 * (amount || 1), predicted_slippage_pct: 0.001, total_cost: 98150 * (amount || 1), fees: { trading_fee: 50, slippage_cost: 100 } },
+                    { exchange: "kraken", quote_price: 98050 * (amount || 1), predicted_slippage_pct: 0.0015, total_cost: 98250 * (amount || 1), fees: { trading_fee: 60, slippage_cost: 140 } },
+                    { exchange: "coinbase", quote_price: 98100 * (amount || 1), predicted_slippage_pct: 0.002, total_cost: 98400 * (amount || 1), fees: { trading_fee: 80, slippage_cost: 220 } },
+                ];
+
+                slippageDataRef.current = {
+                    best_venue: "binance",
+                    quotes: mockQuotes,
+                    symbol: symbol.toUpperCase(),
+                    amount,
+                    side: (side && ['buy', 'sell'].includes(side.toLowerCase())) ? (side.toLowerCase() as "buy" | "sell") : 'sell'
+                };
+                forceUpdate(n => n + 1);
+
+                return `API Error (${error.message}). Showing simulated data for demonstration.`;
             }
         },
     });
