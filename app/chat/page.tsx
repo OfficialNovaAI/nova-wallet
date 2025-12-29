@@ -11,6 +11,7 @@ import { TransactionCard } from "@/components/chat/TransactionCard";
 import { BalanceCard } from "@/components/chat/BalanceCard";
 import { MultiChainBalanceCard } from "@/components/chat/MultiChainBalanceCard";
 import { InfoCard } from "@/components/chat/InfoCard";
+import { SlippageCard } from "@/components/chat/SlippageCard"; // NEW
 import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -122,6 +123,15 @@ function ChatPageContent() {
 
     // State to trigger re-render after data is set
     const [, forceUpdate] = useState(0);
+
+    // State for slippage prediction
+    const slippageDataRef = useRef<{
+        best_venue: string;
+        quotes: any[];
+        symbol: string;
+        amount: number;
+        side: "buy" | "sell";
+    } | null>(null);
 
     useCopilotAction({
         name: "checkAllBalances",
@@ -284,6 +294,63 @@ function ChatPageContent() {
             }
 
             return `Transaction prepared: Sending ${amount} tokens to ${recipient}. Please confirm the transaction in the UI above.`;
+        },
+    });
+
+    useCopilotAction({
+        name: "predictTradeCost",
+        description: "Predicts execution cost and slippage for a trade. Use this when user wants to analyze trade cost, check slippage, or compare exchanges for CEX (Binance, Kraken, etc).",
+        parameters: [
+            { name: "symbol", type: "string", description: "Trading pair symbol (e.g., BTC/USDT, ETH/USDT)" },
+            { name: "amount", type: "number", description: "Amount of crypto to trade" },
+            { name: "side", type: "string", description: "Trade side: 'buy' or 'sell'" },
+        ],
+        render: ({ status, args }) => {
+            if (status === "complete" && slippageDataRef.current) {
+                return (
+                    <SlippageCard
+                        symbol={slippageDataRef.current.symbol}
+                        amount={slippageDataRef.current.amount}
+                        side={slippageDataRef.current.side}
+                        bestVenue={slippageDataRef.current.best_venue}
+                        quotes={slippageDataRef.current.quotes}
+                    />
+                );
+            }
+            if (status === "executing") {
+                return <div className="text-sm text-gray-500 italic animate-pulse">🤖 Analyzing market depth & predicted slippage...</div>;
+            }
+            return <></>;
+        },
+        handler: async ({ symbol, amount, side }) => {
+            console.log("🔥 predictTradeCost action called!", { symbol, amount, side }); // DEBUG
+            try {
+                // Determine side if not provided or valid
+                const tradeSide = (side && ['buy', 'sell'].includes(side.toLowerCase())) ? side.toLowerCase() : 'sell';
+
+                const response = await fetch("/api/ai/predict-cost", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ symbol: symbol.toUpperCase(), amount, side: tradeSide }),
+                });
+
+                if (!response.ok) throw new Error("Failed to fetch prediction");
+
+                const data = await response.json();
+
+                slippageDataRef.current = {
+                    ...data,
+                    symbol: symbol.toUpperCase(),
+                    amount,
+                    side: tradeSide as "buy" | "sell"
+                };
+                forceUpdate(n => n + 1); // Trigger render
+
+                return `Prediction complete. View the card above.`;
+            } catch (error: any) {
+                console.error("🔥 predictTradeCost error:", error);
+                return `Error analyzing trade: ${error.message}`;
+            }
         },
     });
 
