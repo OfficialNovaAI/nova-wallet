@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAccount, useSendTransaction, useChainId } from "wagmi";
 import { parseEther } from "viem";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { TokenSidebar } from "@/components/chat/TokenSidebar";
-import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { TransactionCard } from "@/components/chat/TransactionCard";
 import { BalanceCard } from "@/components/chat/BalanceCard";
 import { MultiChainBalanceCard } from "@/components/chat/MultiChainBalanceCard";
@@ -14,7 +13,6 @@ import { InfoCard } from "@/components/chat/InfoCard";
 import { SlippageCard } from "@/components/chat/SlippageCard"; // NEW
 import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Wallet } from "lucide-react";
 import { toast } from "sonner";
@@ -40,11 +38,6 @@ function ChatPageContent() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isMounted, setIsMounted] = useState(false);
 
-    // Transaction state for Generative UI
-    const [pendingTransaction, setPendingTransaction] = useState<{
-        type: "send" | "receive";
-        data: any;
-    } | null>(null);
 
     // State to store balance data for Generative UI
     const [balanceData, setBalanceData] = useState<{
@@ -246,7 +239,6 @@ function ChatPageContent() {
                             gasFee: "< 0.01 MNT",
                         }}
                         onCancel={() => {
-                            setPendingTransaction(null);
                             toast.info("Transaction cancelled");
                         }}
                         onConfirm={() => {
@@ -259,7 +251,6 @@ function ChatPageContent() {
                                         toast.success("Transaction submitted!", {
                                             description: `Hash: ${hash.slice(0, 10)}...${hash.slice(-8)}`
                                         });
-                                        setPendingTransaction(null);
                                     },
                                     onError: (error) => {
                                         toast.error("Transaction failed", {
@@ -267,8 +258,9 @@ function ChatPageContent() {
                                         });
                                     }
                                 });
-                            } catch (error: any) {
-                                toast.error("Error", { description: error.message });
+                            } catch (error) {
+                                const errorMessage = error instanceof Error ? error.message : "Unknown error";
+                                toast.error("Error", { description: errorMessage });
                             }
                         }}
                     />
@@ -312,7 +304,6 @@ function ChatPageContent() {
                         symbol={slippageDataRef.current.symbol}
                         amount={slippageDataRef.current.amount}
                         side={slippageDataRef.current.side}
-                        bestVenue={slippageDataRef.current.best_venue}
                         quotes={slippageDataRef.current.quotes}
                     />
                 );

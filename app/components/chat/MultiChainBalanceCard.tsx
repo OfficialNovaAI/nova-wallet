@@ -1,6 +1,6 @@
 "use client";
 
-import { Wallet, TrendingUp, ChevronRight, Copy, Check, ExternalLink } from "lucide-react";
+import { Wallet, Copy, Check, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -36,7 +36,6 @@ const chainColors: Record<string, string> = {
 export const MultiChainBalanceCard = ({
     balances,
     address,
-    totalUsdValue,
 }: MultiChainBalanceCardProps) => {
     const [copied, setCopied] = useState(false);
     const [expandedChain, setExpandedChain] = useState<string | null>(null);
