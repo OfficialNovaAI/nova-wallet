@@ -15,16 +15,20 @@ export async function POST(request: Request) {
 
         const externalApiUrl = "https://wildanniam-slippagepredictoronchain.hf.space/predict";
 
+        const payload = {
+            symbol,
+            amount,
+            side,
+        };
+
+        console.log("[predict-cost] Sending payload to external API:", payload);
+
         const response = await fetch(externalApiUrl, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                symbol,
-                amount,
-                side,
-            }),
+            body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
