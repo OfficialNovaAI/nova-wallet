@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAccount, useSendTransaction, useChainId } from "wagmi";
 import { parseEther } from "viem";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { TokenSidebar } from "@/components/chat/TokenSidebar";
-import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { TransactionCard } from "@/components/chat/TransactionCard";
 import { BalanceCard } from "@/components/chat/BalanceCard";
 import { MultiChainBalanceCard } from "@/components/chat/MultiChainBalanceCard";
@@ -14,14 +13,15 @@ import { InfoCard } from "@/components/chat/InfoCard";
 import { SlippageCard } from "@/components/chat/SlippageCard"; // NEW
 import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { Button } from "@/components/ui/button";
-import { Wallet } from "lucide-react";
+import { Wallet, Sparkles, Send } from "lucide-react";
 import { toast } from "sonner";
 
 // CopilotKit Imports
-import { CopilotKit, useCopilotAction } from "@copilotkit/react-core";
+import { CopilotKit, useCopilotAction, useCopilotChat } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
+import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import "@copilotkit/react-ui/styles.css";
 
 export default function ChatPage() {
@@ -39,12 +39,14 @@ function ChatPageContent() {
     const { sendTransaction } = useSendTransaction();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isMounted, setIsMounted] = useState(false);
+    const [showWelcome, setShowWelcome] = useState(true);
+    const [inputValue, setInputValue] = useState("");
+    const [hasStartedChat, setHasStartedChat] = useState(false);
+    const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
-    // Transaction state for Generative UI
-    const [pendingTransaction, setPendingTransaction] = useState<{
-        type: "send" | "receive";
-        data: any;
-    } | null>(null);
+    // useCopilotChat for programmatic message sending
+    const { appendMessage } = useCopilotChat();
+
 
     // State to store balance data for Generative UI
     const [balanceData, setBalanceData] = useState<{
@@ -246,7 +248,6 @@ function ChatPageContent() {
                             gasFee: "< 0.01 MNT",
                         }}
                         onCancel={() => {
-                            setPendingTransaction(null);
                             toast.info("Transaction cancelled");
                         }}
                         onConfirm={() => {
@@ -259,7 +260,6 @@ function ChatPageContent() {
                                         toast.success("Transaction submitted!", {
                                             description: `Hash: ${hash.slice(0, 10)}...${hash.slice(-8)}`
                                         });
-                                        setPendingTransaction(null);
                                     },
                                     onError: (error) => {
                                         toast.error("Transaction failed", {
@@ -267,8 +267,9 @@ function ChatPageContent() {
                                         });
                                     }
                                 });
-                            } catch (error: any) {
-                                toast.error("Error", { description: error.message });
+                            } catch (error) {
+                                const errorMessage = error instanceof Error ? error.message : "Unknown error";
+                                toast.error("Error", { description: errorMessage });
                             }
                         }}
                     />
@@ -312,7 +313,6 @@ function ChatPageContent() {
                         symbol={slippageDataRef.current.symbol}
                         amount={slippageDataRef.current.amount}
                         side={slippageDataRef.current.side}
-                        bestVenue={slippageDataRef.current.best_venue}
                         quotes={slippageDataRef.current.quotes}
                     />
                 );
@@ -460,6 +460,28 @@ function ChatPageContent() {
         setIsMounted(true);
     }, []);
 
+    // Send pending message after CopilotChat mounts
+    useEffect(() => {
+        if (pendingMessage && hasStartedChat) {
+            const sendPendingMessage = async () => {
+                try {
+                    await appendMessage(
+                        new TextMessage({
+                            role: MessageRole.User,
+                            content: pendingMessage,
+                        })
+                    );
+                    setPendingMessage(null);
+                } catch (error) {
+                    console.error("Error sending message:", error);
+                }
+            };
+            // Small delay to ensure CopilotChat is mounted
+            const timer = setTimeout(sendPendingMessage, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [pendingMessage, hasStartedChat, appendMessage]);
+
     if (!isMounted) return null;
 
     if (!isConnected) {
@@ -497,23 +519,90 @@ function ChatPageContent() {
                 <TokenSidebar isOpen={sidebarOpen} />
 
                 {/* CopilotKit Chat UI */}
-                <main className="flex-1 flex flex-col min-h-0 h-full">
-                    {/* Chat Status Header */}
-                    <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
-                        Right now you&apos;re in chat with Nova AI
-                    </div>
+                <main className="flex-1 flex flex-col min-h-0 h-full relative">
+                    {/* Welcome Screen with Input */}
+                    {showWelcome ? (
+                        <div className="flex-1 flex flex-col">
+                            {/* Chat Status Header */}
+                            <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
+                                Right now you&apos;re in chat with Nova AI
+                            </div>
 
-                    <div className="flex-1 min-h-0 h-full overflow-hidden">
-                        <CopilotChat
-                            className="h-full w-full"
-                            labels={{
-                                title: "Nova AI",
-                                initial: "Halo! Saya Nova AI, asisten crypto wallet kamu. Saya bisa bantu cek saldo, kirim crypto, dan menjawab pertanyaan tentang blockchain. Mau aku bantu apa hari ini?",
-                                placeholder: "Tanya Nova AI tentang wallet atau crypto...",
-                            }}
-                            UserMessage={CustomUserMessage}
-                            Input={CustomChatInput}
-                            instructions={`Kamu adalah Nova AI, asisten crypto wallet yang ramah dan helpful. Selalu gunakan Bahasa Indonesia.
+                            {/* Welcome Screen Content */}
+                            <div className="flex-1 flex items-center justify-center overflow-auto">
+                                <WelcomeScreen
+                                    onActionClick={(action) => {
+                                        const actionMessages: Record<string, string> = {
+                                            send: "Saya ingin mengirim crypto",
+                                            receive: "Tampilkan alamat wallet saya",
+                                            swap: "Saya ingin swap token",
+                                            paylink: "Buat payment link"
+                                        };
+                                        setInputValue(actionMessages[action]);
+                                    }}
+                                />
+                            </div>
+
+                            {/* Custom Input at Bottom - Match CopilotChat Input Design */}
+                            <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+                                <form
+                                    onSubmit={async (e) => {
+                                        e.preventDefault();
+                                        if (inputValue.trim()) {
+                                            const message = inputValue.trim();
+                                            setInputValue("");
+                                            setShowWelcome(false);
+                                            setHasStartedChat(true);
+                                            setPendingMessage(message);
+                                        }
+                                    }}
+                                >
+                                    <div className="flex items-center gap-3 bg-gray-100 rounded-full px-4 py-3 shadow-sm">
+                                        {/* Sparkle Icon */}
+                                        <Sparkles className="w-5 h-5 text-purple-500 flex-shrink-0" />
+
+                                        {/* Input Field */}
+                                        <input
+                                            type="text"
+                                            value={inputValue}
+                                            onChange={(e) => setInputValue(e.target.value)}
+                                            placeholder="Ask Nova AI about your wallet, markets, or transactions..."
+                                            className="flex-1 bg-transparent border-none outline-none text-sm text-gray-800 placeholder-gray-500"
+                                        />
+
+                                        {/* Send Button */}
+                                        <button
+                                            type="submit"
+                                            disabled={!inputValue.trim()}
+                                            className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shadow-md"
+                                        >
+                                            <Send className="w-4 h-4 text-white" />
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Chat Status Header */}
+                            <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
+                                Right now you&apos;re in chat with Nova AI
+                            </div>
+
+                            {/* CopilotChat - Only shown after welcome */}
+                            <div className="flex-1 min-h-0 h-full overflow-hidden">
+                                {hasStartedChat && (
+                                    <CopilotChat
+                                        className="h-full w-full"
+                                        labels={{
+                                            title: "Nova AI",
+                                            initial: "",
+                                            placeholder: "Tanya Nova AI tentang wallet atau crypto...",
+                                        }}
+                                        UserMessage={CustomUserMessage}
+                                        Input={CustomChatInput}
+                                        makeSystemMessage={() => ""}
+                                        instructions={`Kamu adalah Nova AI, asisten crypto wallet yang ramah dan helpful. Selalu gunakan Bahasa Indonesia.
 
 TOOLS YANG TERSEDIA:
 1. checkBalance - Cek saldo di SATU chain tertentu
@@ -535,8 +624,11 @@ CONTOH:
 - "apa itu blockchain?" → gunakan displayInfoCard untuk penjelasan
 
 Wallet user: ${address} | Chain ID: ${chainId}`}
-                        />
-                    </div>
+                                    />
+                                )}
+                            </div>
+                        </>
+                    )}
                 </main>
             </div>
         </div>

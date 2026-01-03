@@ -148,6 +148,14 @@
     box-shadow: 0px 1px 0.75px 0px #FFFFFF1F inset;
     box-shadow: 0px 0px 0px 1px #423493;
   }
+
+  /** WALLET DETAIL **/
+  .total-asset-value {
+   background: linear-gradient(246.59deg, #E9E2FE -27.62%, #A692FA 18.74%, #4937B2 65.11%); 
+   box-shadow: 0px 8px 10px -6px #C8BAF833;
+   box-shadow: 0px 20px 25px -5px #4B39B333;
+   border-radius: 16px;
+  }
 }
 
 * {

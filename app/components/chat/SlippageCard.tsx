@@ -19,11 +19,10 @@ interface SlippageCardProps {
     symbol: string;
     amount: number;
     side: "buy" | "sell";
-    bestVenue: string;
     quotes: Quote[];
 }
 
-export function SlippageCard({ symbol, amount, side, bestVenue, quotes }: SlippageCardProps) {
+export function SlippageCard({ symbol, amount, side, quotes }: SlippageCardProps) {
     const [expandedExchange, setExpandedExchange] = useState<string | null>(null);
 
     const formatCurrency = (val: number) =>
