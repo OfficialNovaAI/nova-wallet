@@ -10,7 +10,7 @@ import { TransactionCard } from "@/components/chat/TransactionCard";
 import { BalanceCard } from "@/components/chat/BalanceCard";
 import { MultiChainBalanceCard } from "@/components/chat/MultiChainBalanceCard";
 import { InfoCard } from "@/components/chat/InfoCard";
-import { SlippageCard } from "@/components/chat/SlippageCard"; // NEW
+import { SlippageCard } from "@/components/chat/SlippageCard";
 import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
@@ -47,7 +47,6 @@ function ChatPageContent() {
     // useCopilotChat for programmatic message sending
     const { appendMessage } = useCopilotChat();
 
-
     // State to store balance data for Generative UI
     const [balanceData, setBalanceData] = useState<{
         balance: string;
@@ -55,6 +54,9 @@ function ChatPageContent() {
         chainName: string;
     } | null>(null);
 
+    // ============================================
+    // EXISTING ACTION: Check Balance
+    // ============================================
     useCopilotAction({
         name: "checkBalance",
         description: "Cek saldo wallet user di blockchain tertentu. Gunakan ini ketika user mau tahu saldo mereka, cek balance, atau lihat berapa crypto yang dimiliki.",
@@ -135,6 +137,9 @@ function ChatPageContent() {
         side: "buy" | "sell";
     } | null>(null);
 
+    // ============================================
+    // EXISTING ACTION: Check All Balances
+    // ============================================
     useCopilotAction({
         name: "checkAllBalances",
         description: "Cek saldo wallet user di SEMUA chain yang tersedia sekaligus. Gunakan ini ketika user mau lihat semua saldo, cek portfolio, atau lihat balance di setiap chain.",
@@ -190,7 +195,7 @@ function ChatPageContent() {
                     <div className="bg-white rounded-2xl border border-gray-200 p-6 max-w-md mt-3 shadow-lg">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 
-                                          flex items-center justify-center animate-pulse">
+                                            flex items-center justify-center animate-pulse">
                                 <Wallet className="w-6 h-6 text-white" />
                             </div>
                             <div>
@@ -223,6 +228,9 @@ function ChatPageContent() {
         },
     });
 
+    // ============================================
+    // EXISTING ACTION: Prepare Transaction
+    // ============================================
     useCopilotAction({
         name: "prepareTransaction",
         description: "Prepare a cryptocurrency transaction for the user to sign. Use this when the user wants to send money.",
@@ -298,6 +306,9 @@ function ChatPageContent() {
         },
     });
 
+    // ============================================
+    // EXISTING ACTION: Predict Trade Cost
+    // ============================================
     useCopilotAction({
         name: "predictTradeCost",
         description: "Predicts execution cost and slippage for a trade. Use this when user wants to analyze trade cost, check slippage, or compare exchanges for CEX (Binance, Kraken, etc).",
@@ -371,6 +382,9 @@ function ChatPageContent() {
         },
     });
 
+    // ============================================
+    // EXISTING ACTION: Show Receive Address
+    // ============================================
     useCopilotAction({
         name: "showReceiveAddress",
         description: "Tampilkan alamat wallet user dengan QR code untuk menerima crypto. Gunakan ini ketika user ingin menerima token, melihat alamat wallet mereka, meminta QR code, atau share address.",
@@ -402,7 +416,9 @@ function ChatPageContent() {
         },
     });
 
-    // Generative UI: Display information in card format (NOT for balance!)
+    // ============================================
+    // EXISTING ACTION: Display Info Card
+    // ============================================
     useCopilotAction({
         name: "displayInfoCard",
         description: "Tampilkan informasi umum dalam format card. JANGAN gunakan untuk menampilkan saldo/balance - gunakan checkBalance atau checkAllBalances untuk itu. Gunakan displayInfoCard hanya untuk: tips crypto, penjelasan blockchain, status transaksi, atau informasi edukasi.",
@@ -453,6 +469,233 @@ function ChatPageContent() {
             }
 
             return `Informasi "${title}" berhasil ditampilkan dalam format card.`;
+        },
+    });
+
+    // ============================================
+    // NEW ACTION 1: Analyze Portfolio (All Tokens)
+    // ============================================
+    useCopilotAction({
+        name: "analyzePortfolio",
+        description: "Analisis portfolio lengkap wallet: semua token holdings (native + ERC-20), nilai USD, profit/loss. Gunakan ini ketika user bertanya 'portfolio aku', 'analyze address 0x...', 'holdings', dll.",
+        parameters: [
+            { name: "targetAddress", type: "string", description: "Wallet address to analyze (0x...). If not provided, uses connected wallet address.", required: false },
+            { name: "chainId", type: "number", description: "Chain ID untuk analisis (default: chain yang sedang aktif)", required: false },
+        ],
+        handler: async ({ targetAddress, chainId: targetChainId }) => {
+            console.log("🔥 analyzePortfolio action called!", { targetAddress, targetChainId });
+
+            // Use provided address or fall back to connected wallet
+            const walletAddress = targetAddress || address;
+
+            if (!walletAddress) {
+                return "No address provided and wallet is not connected. Please provide an address (0x...) or connect your wallet.";
+            }
+
+            try {
+                const resolvedChainId = targetChainId || chainId;
+
+                // Call blockchain API route (server-side)
+                const response = await fetch('/api/blockchain', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'portfolio',
+                        address: walletAddress,
+                        chainId: resolvedChainId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch portfolio data');
+                }
+
+                const { data: result } = await response.json();
+
+                if (result.data.type === 'portfolio') {
+                    const portfolio = result.data.analysis;
+
+                    // Format response for AI
+                    let response = `✅ Portfolio Analysis Complete (${result.chain}):\n\n`;
+                    response += `💰 Native Balance: ${portfolio.nativeBalance.toFixed(4)} ${result.chain.includes('ETH') ? 'ETH' : result.chain.includes('Mantle') ? 'MNT' : 'LSK'}\n`;
+                    response += `💵 Native Value: $${portfolio.nativeValueUSD.toFixed(2)}\n\n`;
+
+                    if (portfolio.numTokens > 0) {
+                        response += `📊 Token Holdings (${portfolio.numTokens} tokens):\n`;
+                        portfolio.tokenHoldings.slice(0, 5).forEach((token: any, i: number) => {
+                            response += `${i + 1}. ${token.tokenSymbol}: ${token.balance.toFixed(4)} tokens\n`;
+                            response += `   Value: $${token.currentValueUSD.toFixed(2)} | P&L: ${token.pnlPercentage > 0 ? '+' : ''}${token.pnlPercentage.toFixed(2)}%\n`;
+                        });
+
+                        response += `\n💼 Total Portfolio: $${portfolio.totalPortfolioValueUSD.toFixed(2)}\n`;
+                        response += `📈 Total P&L: ${portfolio.totalPnLPercentage > 0 ? '+' : ''}${portfolio.totalPnLPercentage.toFixed(2)}%`;
+                    } else {
+                        response += `ℹ️ No ERC-20 tokens found. Only native balance available.`;
+                    }
+
+                    return response;
+                }
+
+                return "Failed to analyze portfolio. Please try again.";
+            } catch (error: any) {
+                console.error("Portfolio analysis error:", error);
+                return `Error analyzing portfolio: ${error.message}`;
+            }
+        },
+        render: ({ status }) => {
+            if (status === "executing") {
+                return <div className="text-sm text-muted-foreground animate-pulse">🔍 Analyzing on-chain portfolio data...</div>;
+            }
+            return <></>;
+        },
+    });
+
+    // ============================================
+    // NEW ACTION 2: Analyze Token Activity (Trading History)
+    // ============================================
+    useCopilotAction({
+        name: "analyzeTokenActivity",
+        description: "Analisis aktivitas trading wallet user: token yang dibeli/dijual, profit/loss per token, performa trading. Gunakan ini ketika user tanya 'profit aku berapa', 'token apa yang paling untung', 'rugi berapa', 'riwayat trading', dll.",
+        parameters: [
+            { name: "chainId", type: "number", description: "Chain ID untuk analisis", required: false },
+            { name: "timeframeDays", type: "number", description: "Timeframe dalam hari (30, 90, 365, atau all-time)", required: false },
+        ],
+        handler: async ({ chainId: targetChainId, timeframeDays }) => {
+            console.log("🔥 analyzeTokenActivity action called!", { targetChainId, timeframeDays });
+
+            if (!isConnected || !address) {
+                return "User wallet belum terkoneksi. Minta user untuk connect wallet dulu.";
+            }
+
+            try {
+                const resolvedChainId = targetChainId || chainId;
+
+                // Call blockchain API route (server-side)
+                const response = await fetch('/api/blockchain', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'token_activity',
+                        address,
+                        chainId: resolvedChainId,
+                        timeframeDays
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch token activity');
+                }
+
+                const { data: result } = await response.json();
+
+                if (result.data.type === 'token_activity') {
+                    const activity = result.data.analysis;
+                    const summary = activity.summary;
+
+                    let response = `✅ Token Activity Analysis (${result.chain}):\n\n`;
+                    response += `📊 Trading Summary:\n`;
+                    response += `• Tokens Bought: ${summary.numTokensBought}\n`;
+                    response += `• Tokens Sold: ${summary.numTokensSold}\n`;
+                    response += `• Total Invested: $${summary.totalInvestedUSD.toFixed(2)}\n`;
+                    response += `• Current Value: $${summary.currentPortfolioValueUSD.toFixed(2)}\n`;
+                    response += `• P&L: ${summary.totalPnLPercentage > 0 ? '+' : ''}${summary.totalPnLPercentage.toFixed(2)}% ($${summary.totalPnL > 0 ? '+' : ''}${summary.totalPnL.toFixed(2)})\n\n`;
+
+                    if (summary.mostProfitableToken) {
+                        const best = summary.mostProfitableToken;
+                        response += `🏆 Most Profitable: ${best.tokenSymbol}\n`;
+                        response += `   P&L: +${best.pnlPercentage.toFixed(2)}% ($${best.pnl.toFixed(2)})\n\n`;
+                    }
+
+                    if (summary.biggestLoserToken && summary.biggestLoserToken.pnl < 0) {
+                        const worst = summary.biggestLoserToken;
+                        response += `📉 Biggest Loss: ${worst.tokenSymbol}\n`;
+                        response += `   P&L: ${worst.pnlPercentage.toFixed(2)}% ($${worst.pnl.toFixed(2)})\n`;
+                    }
+
+                    return response;
+                }
+
+                return "Failed to analyze token activity. Please try again.";
+            } catch (error: any) {
+                console.error("Token activity error:", error);
+                return `Error analyzing trading activity: ${error.message}`;
+            }
+        },
+        render: ({ status }) => {
+            if (status === "executing") {
+                return <div className="text-sm text-muted-foreground animate-pulse">📊 Analyzing trading history & P&L...</div>;
+            }
+            return <></>;
+        },
+    });
+
+    // ============================================
+    // NEW ACTION 3: Transaction Stats (Gas, Activity)
+    // ============================================
+    useCopilotAction({
+        name: "getTransactionStats",
+        description: "Dapatkan statistik transaksi wallet user: total transaksi, gas fees yang dipakai, aktivitas wallet. Gunakan ini ketika user tanya 'berapa gas yang aku habiskan', 'seberapa aktif wallet aku', 'total transaksi', dll.",
+        parameters: [
+            { name: "chainId", type: "number", description: "Chain ID untuk analisis", required: false },
+        ],
+        handler: async ({ chainId: targetChainId }) => {
+            console.log("🔥 getTransactionStats action called!", { targetChainId });
+
+            if (!isConnected || !address) {
+                return "User wallet belum terkoneksi. Minta user untuk connect wallet dulu.";
+            }
+
+            try {
+                const resolvedChainId = targetChainId || chainId;
+
+                // Call blockchain API route (server-side)
+                const response = await fetch('/api/blockchain', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'transaction_stats',
+                        address,
+                        chainId: resolvedChainId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch transaction stats');
+                }
+
+                const { data: result } = await response.json();
+
+                if (result.data.type === 'transaction_stats') {
+                    const stats = result.data.stats;
+
+                    let response = `✅ Transaction Statistics (${result.chain}):\n\n`;
+                    response += `📈 Activity Overview:\n`;
+                    response += `• Total Transactions: ${stats.totalTransactions}\n`;
+                    response += `• Sent: ${stats.transactionsSent} | Received: ${stats.transactionsReceived}\n`;
+                    response += `• Native Txs: ${stats.ethTransactions} | Token Txs: ${stats.erc20Transactions}\n\n`;
+
+                    response += `⛽ Gas Spending:\n`;
+                    response += `• Total Gas Spent: $${stats.totalGasSpentUSD.toFixed(2)}\n`;
+                    response += `• Average per Tx: $${stats.averageGasPerTxUSD.toFixed(4)}\n\n`;
+
+                    response += `📅 Account Info:\n`;
+                    response += `• Account Age: ${stats.accountAgeDays} days\n`;
+                    response += `• Activity Level: ${stats.activityFrequency}\n`;
+
+                    return response;
+                }
+
+                return "Failed to get transaction stats. Please try again.";
+            } catch (error: any) {
+                console.error("Transaction stats error:", error);
+                return `Error getting transaction stats: ${error.message}`;
+            }
+        },
+        render: ({ status }) => {
+            if (status === "executing") {
+                return <div className="text-sm text-muted-foreground animate-pulse">⛽ Calculating gas & transaction stats...</div>;
+            }
+            return <></>;
         },
     });
 

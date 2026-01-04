@@ -1,3 +1,5 @@
+// nova-wallet/app/api/ai/chat/route.ts - UPDATED WITH BLOCKCHAIN ANALYSIS
+
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { parseIntent } from "@/lib/intentParser";
@@ -5,9 +7,14 @@ import { isAddress as viemIsAddress } from "viem";
 
 import { supportedChains } from "../../../config/chains";
 
-// GoogleGenerativeAI initialization moved to POST handler
+// NEW: Import blockchain analysis functions
+import { 
+    getPortfolioAnalysis, 
+    getTokenActivity, 
+    getTransactionStats 
+} from "@/lib/blockchainAgentWrapper";
 
-// Function untuk check balance
+// Function untuk check balance (UNCHANGED)
 async function checkBalance(address: string, chainId: number) {
     try {
         const response = await fetch(
@@ -41,7 +48,7 @@ type ChatRequestBody = {
     walletContext?: {
         address: string;
         chainId: number;
-        balance?: string; // Balance dari UI (WalletContext)
+        balance?: string;
         isConnected: boolean;
     };
 };
@@ -53,55 +60,61 @@ const SYSTEM_PROMPT = `Kamu adalah Nova AI, asisten crypto wallet yang ramah dan
 Jaringan yang didukung saat ini:
 ${SUPPORTED_CHAINS_LIST}
 
-PENTING:
-- Jika user bertanya tentang saldo di chain yang ada di list di atas, kamu BISA mengeceknya.
-- Jika user bertanya tentang chain yang TIDAK ada di list, jelaskan bahwa saat ini belum didukung.
+PENTING - RULES MUTLAK:
+1. Jika user bertanya "portfolio aku apa aja", "token apa yang aku punya", "holdings aku", atau sejenisnya:
+   → WAJIB panggil analyzePortfolio DULU
+   → JANGAN jawab langsung tanpa data
+
+2. Jika user bertanya "profit aku berapa", "token apa yang paling untung", "rugi berapa", atau sejenisnya:
+   → WAJIB panggil analyzeTokenActivity DULU
+   → JANGAN jawab langsung tanpa data
+
+3. Jika user bertanya "saldo", "balance", "berapa ETH/MNT aku":
+   → WAJIB panggil checkBalance DULU
+   → JANGAN jawab langsung tanpa data
+
+INGAT: Kamu TIDAK BISA membuat data. Kamu HARUS memanggil function untuk mendapatkan data real dari blockchain.
 
 Tugas kamu:
-1. Bantu user cek saldo wallet mereka dengan memanggil function checkBalance ketika user bertanya tentang saldo
-2. Jelaskan informasi crypto dengan bahasa sederhana, terutama tentang ekosistem Mantle
-3. Validasi transaksi sebelum execute (jangan pernah execute tanpa konfirmasi user)
+1. Bantu user cek saldo wallet dengan memanggil checkBalance
+2. Bantu user analisis portfolio dengan memanggil analyzePortfolio untuk melihat semua token holdings + profit/loss
+3. Bantu user lihat aktivitas trading dengan memanggil analyzeTokenActivity untuk melihat riwayat buy/sell token
+4. Jelaskan informasi crypto dengan bahasa sederhana
+5. Validasi transaksi sebelum execute (jangan pernah execute tanpa konfirmasi user)
 
-PENTING - Format Jawaban Saldo:
-- SELALU sebutkan chain name (misalnya "di Mantle Mainnet", "di Mantle Sepolia", "di Ethereum Mainnet")
-- SELALU gunakan tokenSymbol dari response checkBalance (bisa ETH atau MNT)
-- Format: "Saldo kamu adalah X [tokenSymbol] di [chainName]"
-- Jangan pernah hanya bilang "saldo kamu X ETH" tanpa mention chain-nya
-
-Contoh jawaban yang BENAR:
-- "Saldo kamu adalah 450 MNT di Mantle Mainnet" (kalau tokenSymbol = MNT)
-- "Saldo kamu adalah 0.007 ETH di Ethereum Mainnet" (kalau tokenSymbol = ETH)
-- "Saldo kamu adalah 0 MNT di Mantle Sepolia"
-
-Contoh jawaban yang SALAH:
-- "Saldo kamu adalah 0.38 ETH" (tidak mention chain)
-- "Saldo kamu 0.38" (tidak mention token dan chain)
+Format Jawaban:
+- SELALU sebutkan chain name (misalnya "di Mantle Sepolia", "di Ethereum Sepolia")
+- SELALU gunakan data REAL dari function calls
+- JANGAN membuat data palsu atau contoh
+- Jika function call gagal, jelaskan kenapa dan minta user coba lagi
 
 Catatan tentang Token:
-- Function checkBalance mengembalikan saldo NATIVE TOKEN dari chain tersebut
-- Response akan include "tokenSymbol" (ETH untuk Ethereum, MNT untuk Mantle) dan "tokenName"
-- SELALU gunakan tokenSymbol dari response, jangan hardcode "ETH"
-- Untuk Mantle Network & Mantle Sepolia: native token = MNT
-- Untuk Ethereum Mainnet: native token = ETH
-- Belum termasuk ERC-20 tokens (USDT, USDC, dll) - itu fitur lanjutan
-- Jika user tanya tentang token lain (USDT, USDC), jelaskan bahwa untuk sekarang kita hanya cek native token
+- checkBalance → native token saja (ETH/MNT/LSK)
+- analyzePortfolio → semua token + nilai USD + P&L
+- analyzeTokenActivity → riwayat trading + profit per token
+
+✨ CATATAN PENTING TENTANG DATA COVERAGE:
+- Untuk performa optimal (hasil dalam 30-60 detik), analisis portfolio menggunakan 500 transaksi terakhir
+- Portfolio analysis fokus ke 20 token paling aktif kamu (yang paling sering ditransaksikan)
+- Token dengan balance sangat kecil (dust) tidak di-price untuk menghemat waktu
+- Sebutkan ini secara natural seperti:
+  * "Aku sudah cek 500 transaksi terakhir dan 20 token utama kamu..."
+  * "Berdasarkan token-token aktif kamu..."
+  * "Ini analisis token yang sering kamu transaksikan..."
+- JANGAN bilang "aku cuma bisa" atau "ada limitasi" - buat terdengar seperti fitur yang smart dan efisien!
 
 Ingat:
 - Selalu gunakan Bahasa Indonesia
+- WAJIB panggil function sebelum jawab
 - Jelaskan dengan bahasa yang mudah dipahami
-- Ketika user bertanya tentang saldo, gunakan function checkBalance
-- Function checkBalance akan mengembalikan data saldo dari blockchain + comparison dengan UI
-- Jika ada field "comparison" di response checkBalance:
-  * Kalau "matches: false" dan ada "reason", jelaskan ke user kenapa berbeda (misalnya chain berbeda, atau perbedaan kecil karena timing refresh)
-  * Kalau "matches: true", cukup kasih tahu saldo tanpa perlu mention comparison
 - Jangan pernah execute transaksi tanpa konfirmasi eksplisit dari user
 - Kalau user belum connect wallet, ingatkan mereka untuk connect dulu`;
 
-// Function schema untuk Gemini
+// Function schema untuk Gemini (KEEP EXISTING + ADD NEW)
 const tools = [
     {
         name: "checkBalance",
-        description: "Cek saldo wallet di blockchain tertentu",
+        description: "Cek saldo native token (ETH/MNT/LSK) wallet di blockchain tertentu",
         parameters: {
             type: SchemaType.OBJECT,
             properties: {
@@ -112,6 +125,46 @@ const tools = [
                 chainId: {
                     type: SchemaType.NUMBER as const,
                     description: "Chain ID blockchain (contoh: 5000 untuk Mantle Mainnet, 5003 untuk Mantle Sepolia)",
+                },
+            },
+            required: ["address", "chainId"],
+        },
+    },
+    {
+        name: "analyzePortfolio",
+        description: "Analisis portfolio lengkap: semua token holdings, nilai USD, profit/loss. Gunakan ini jika user tanya 'token apa aja yang aku punya', 'portfolio aku', 'holdings', dll.",
+        parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+                address: {
+                    type: SchemaType.STRING as const,
+                    description: "Alamat wallet yang ingin dianalisis",
+                },
+                chainId: {
+                    type: SchemaType.NUMBER as const,
+                    description: "Chain ID blockchain",
+                },
+            },
+            required: ["address", "chainId"],
+        },
+    },
+    {
+        name: "analyzeTokenActivity",
+        description: "Analisis aktivitas trading: token apa yang dibeli/dijual, profit/loss per token, performa trading. Gunakan ini jika user tanya 'profit aku berapa', 'token apa yang paling untung', 'riwayat trading', dll.",
+        parameters: {
+            type: SchemaType.OBJECT,
+            properties: {
+                address: {
+                    type: SchemaType.STRING as const,
+                    description: "Alamat wallet yang ingin dianalisis",
+                },
+                chainId: {
+                    type: SchemaType.NUMBER as const,
+                    description: "Chain ID blockchain",
+                },
+                timeframeDays: {
+                    type: SchemaType.NUMBER as const,
+                    description: "Timeframe dalam hari (opsional, default semua history)",
                 },
             },
             required: ["address", "chainId"],
@@ -141,6 +194,7 @@ const tools = [
     }
 ];
 
+// KEEP ALL EXISTING HELPER FUNCTIONS (prepareSendTransaction, etc.)
 interface PrepareSendParams {
     fromAddress: string;
     toAddress: string;
@@ -149,7 +203,7 @@ interface PrepareSendParams {
 }
 
 const GAS_LIMIT = 21000;
-const DEFAULT_GAS_PRICE_GWEI = 0.001; // Mantle gas fees are very low
+const DEFAULT_GAS_PRICE_GWEI = 0.001;
 
 const isValidAddress = (address: string) =>
     viemIsAddress(address as `0x${string}`);
@@ -216,7 +270,7 @@ const prepareSendTransaction = async ({
     };
 };
 
-// Helper to call Gemini API via fetch
+// Helper to call Gemini API via fetch (UNCHANGED - KEEP YOUR FRIEND'S VERSION)
 async function callGemini(
     messages: ChatRequestBody["messages"],
     tools: any[],
@@ -227,13 +281,11 @@ async function callGemini(
     const encodedKey = encodeURIComponent(cleanKey);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodedKey}`;
 
-    // Transform messages to Gemini format
     const contents = messages.map(msg => ({
         role: msg.role === "user" ? "user" : "model",
         parts: [{ text: msg.content }]
     }));
 
-    // Gemma models do not support native tools yet via API
     const isGemma = modelName.toLowerCase().includes("gemma");
     const toolsConfig = (!isGemma && tools.length > 0) ? {
         function_declarations: tools
@@ -294,15 +346,16 @@ export async function POST(request: Request) {
         let systemInstructionText = SYSTEM_PROMPT;
 
         // Add ReAct Instructions for Gemma
-        // We always add this for robustness if native tools fail or are disabled
         systemInstructionText += `
-        
+
 ATURAN KHUSUS UNTUK MEMANGGIL FUNCTION (TOOL CALLING):
 Kamu memiliki akses ke tools berikut:
-1. checkBalance(address: string, chainId: number) - Cek saldo wallet.
-2. prepareTransaction(toAddress: string, amount: number, chainId: number) - Siapkan transaksi kirim uang.
+1. checkBalance(address: string, chainId: number) - Cek saldo native token.
+2. analyzePortfolio(address: string, chainId: number) - Analisis portfolio lengkap (semua token + P&L).
+3. analyzeTokenActivity(address: string, chainId: number, timeframeDays?: number) - Analisis trading activity.
+4. prepareTransaction(toAddress: string, amount: number, chainId: number) - Siapkan transaksi kirim uang.
 
-JIKA user meminta sesuatu yang membutuhkan tool tersebut (misal: "cek saldo", "kirim token"), JANGAN LANGSUNG MENJAWAB.
+JIKA user meminta sesuatu yang membutuhkan tool tersebut, JANGAN LANGSUNG MENJAWAB.
 Sebaliknya, keluarkan output JSON valid di dalam blok kode \`\`\`json\`\`\` seperti ini:
 
 \`\`\`json
@@ -315,19 +368,7 @@ Sebaliknya, keluarkan output JSON valid di dalam blok kode \`\`\`json\`\`\` sepe
 }
 \`\`\`
 
-Atau untuk transaksi:
-\`\`\`json
-{
-  "tool": "prepareTransaction",
-  "args": {
-    "toAddress": "0x...",
-    "amount": 0.1,
-    "chainId": 5003
-  }
-}
-\`\`\`
-
-Tunggu user (system) memberikan hasil eksekusi tool tersebut sebelum menjawab final.
+Tunggu system memberikan hasil eksekusi tool tersebut sebelum menjawab final.
 `;
 
         if (body.walletContext?.isConnected) {
@@ -342,7 +383,7 @@ Tunggu user (system) memberikan hasil eksekusi tool tersebut sebelum menjawab fi
             augmentedMessages,
             tools,
             apiKey,
-            "gemma-3-27b-it" // Explicitly using user's choice
+            "gemma-3-27b-it" // KEEP YOUR FRIEND'S MODEL CHOICE
         );
 
         let candidate = geminiResponse.candidates?.[0];
@@ -399,23 +440,58 @@ Tunggu user (system) memberikan hasil eksekusi tool tersebut sebelum menjawab fi
                     }
                 }
 
-                const followUpContent = `System: Result of tool ${name}: ${JSON.stringify(functionResult)}. usage_metadata: { matches: ${functionResult.comparison?.matches} }. Explain this to user.`;
-                augmentedMessages.push({ role: "assistant", content: "" }); // Dummy assistant msg to maintain turn order if needed, or better:
-                // Actually, for ReAct, we treat the previous response (with the JSON) as the assistant's turn.
-                // We should append the assistant's request message.
-                // But `augmentedMessages` is just the input array.
-                // We need to simulate: User -> Assistant (JSON request) -> User (System Result) -> Assistant (Final Answer)
-
-                // For native tools, Gemini handles 'function_response'. For text, we allow normal turns.
+                const followUpContent = `System: Result of tool ${name}: ${JSON.stringify(functionResult)}. Explain this to user.`;
                 augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
                 augmentedMessages.push({ role: "user", content: followUpContent });
 
                 geminiResponse = await callGemini(
                     augmentedMessages,
-                    [], // No tools needed for follow up usually, or keep them if multi-step
+                    [],
                     apiKey,
                     "gemma-3-27b-it"
                 );
+
+            } else if (name === "analyzePortfolio") {
+                if (!body.walletContext?.isConnected) {
+                    const followUpContent = `System: User is not connected. Tell them to connect wallet first.`;
+                    augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                    augmentedMessages.push({ role: "user", content: followUpContent });
+                    geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                } else {
+                    try {
+                        const result = await getPortfolioAnalysis(args.address ?? body.walletContext.address, args.chainId ?? resolvedChainId);
+                        const followUpContent = `System: Portfolio analysis complete. Result: ${JSON.stringify(result.data)}. Explain to user in Bahasa Indonesia.`;
+                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                        augmentedMessages.push({ role: "user", content: followUpContent });
+                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                    } catch (error: any) {
+                        const followUpContent = `System: Portfolio analysis failed: ${error.message}. Explain to user.`;
+                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                        augmentedMessages.push({ role: "user", content: followUpContent });
+                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                    }
+                }
+
+            } else if (name === "analyzeTokenActivity") {
+                if (!body.walletContext?.isConnected) {
+                    const followUpContent = `System: User is not connected. Tell them to connect wallet first.`;
+                    augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                    augmentedMessages.push({ role: "user", content: followUpContent });
+                    geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                } else {
+                    try {
+                        const result = await getTokenActivity(args.address ?? body.walletContext.address, args.chainId ?? resolvedChainId, args.timeframeDays);
+                        const followUpContent = `System: Token activity analysis complete. Result: ${JSON.stringify(result.data)}. Explain to user in Bahasa Indonesia.`;
+                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                        augmentedMessages.push({ role: "user", content: followUpContent });
+                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                    } catch (error: any) {
+                        const followUpContent = `System: Token activity analysis failed: ${error.message}. Explain to user.`;
+                        augmentedMessages.push({ role: "assistant", content: parts.map((p: any) => p.text).join("") });
+                        augmentedMessages.push({ role: "user", content: followUpContent });
+                        geminiResponse = await callGemini(augmentedMessages, [], apiKey, "gemma-3-27b-it");
+                    }
+                }
 
             } else if (name === "prepareTransaction") {
                 if (!body.walletContext?.isConnected) {
@@ -447,15 +523,11 @@ Tunggu user (system) memberikan hasil eksekusi tool tersebut sebelum menjawab fi
                 }
             }
 
-            // Re-fetch parts
             candidate = geminiResponse.candidates?.[0];
             parts = candidate?.content?.parts || [];
         }
 
         const finalText = parts.map((p: any) => p.text).join("");
-        // Clean up JSON block from final text if it was the tool call itself? 
-        // Actually, the FINAL text comes from the SECOND call (after system result), which should be natural language.
-        // The FIRST call (with JSON) was pushed to history.
 
         return NextResponse.json({
             message: finalText,
