@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model PaymentRequest {
+  id                      String    @id @default(uuid())
+  cryptoAmount            Float
+  cryptoCurrency          String
+  receiverWallet          String
+  network                 String    @default("ethereum")
+  fiatAmount              Float
+  fiatCurrency            String
+  conversionRate          Float
+  status                  PaymentStatus @default(PENDING)
+  quoteId                 String?
+  midtransOrderId         String?   @unique
+  midtransTransactionId   String?
+  midtransPaidAt          DateTime?
+  transakOrderId          String?   @unique
+  transakCompletedAt      DateTime?
+  cryptoSent              Float?
+  txHash                  String?
+  errorMessage            String?
+  retryCount              Int       @default(0)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  expiresAt               DateTime
+  userIp                  String?
+  userCountry             String?
+
+  @@index([status])
+  @@index([midtransOrderId])
+  @@index([transakOrderId])
+  @@index([createdAt])
+}
+
+enum PaymentStatus {
+  PENDING
+  WAITING_PAYMENT
+  PAID_FIAT
+  PROCESSING_CRYPTO
+  COMPLETED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+model WebhookLog {
+  id                String    @id @default(uuid())
+  source            String
+  eventType         String
+  orderId           String?
+  payload           Json
+  signature         String?
+  verified          Boolean   @default(false)
+  processed         Boolean   @default(false)
+  errorMessage      String?
+  createdAt         DateTime  @default(now())
+
+  @@index([source, orderId])
+  @@index([processed])
+}
