@@ -256,6 +256,12 @@ class TransakService {
         }
     }
 
+    getPaymentLink(config: WidgetConfig) {
+        const widgetConfig = this.generateWidgetConfig(config);
+        const queryParams = new URLSearchParams(widgetConfig).toString();
+        return `${this.widgetUrl}?${queryParams}`;
+    }
+
     signRequest(data: any) {
         const payload = JSON.stringify(data);
         return crypto

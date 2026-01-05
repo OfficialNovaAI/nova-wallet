@@ -78,10 +78,25 @@ class PaymentService {
         }
 
         const isIndonesian = userCountry === 'ID' || userCountry === 'INDONESIA';
+        const paymentMethod = isIndonesian ? 'QRIS' : 'TRANSAK';
+
+        let transakUrl = null;
+        if (paymentMethod === 'TRANSAK' && payment.status === 'PENDING') {
+            transakUrl = transakService.getPaymentLink({
+                cryptoCurrency: payment.cryptoCurrency,
+                cryptoAmount: payment.cryptoAmount,
+                fiatCurrency: payment.fiatCurrency,
+                fiatAmount: payment.fiatAmount,
+                walletAddress: payment.receiverWallet,
+                network: payment.network,
+                partnerOrderId: payment.id
+            });
+        }
 
         return {
             ...payment,
-            paymentMethod: isIndonesian ? 'QRIS' : 'TRANSAK',
+            paymentMethod,
+            transakUrl,
             userCountry
         };
     }
