@@ -50,6 +50,8 @@ class PaymentService {
                 id: paymentRequest.id,
                 paymentUrl,
                 expiresAt: paymentRequest.expiresAt,
+                // Ensure status is returned so frontend knows it's pending
+                status: 'PENDING',
                 quote: {
                     cryptoAmount: quote.cryptoAmount,
                     fiatAmount: quote.fiatAmount,
@@ -156,6 +158,26 @@ class PaymentService {
             await this.updatePaymentStatus(payment.id, 'PROCESSING_CRYPTO', {
                 transakOrderId: transakOrder.id
             });
+
+            // --- SIMULATION FOR DEMO/HACKATHON ---
+            // Automatically complete the Transak part after 3 seconds
+            // In production, we would wait for Transak Webhook
+            if (process.env.NODE_ENV !== 'production') {
+                console.log('🧪 [DEMO] Simulating Transak Completion in 3s...');
+                setTimeout(async () => {
+                    try {
+                        console.log('🧪 [DEMO] Completing Transak Order...');
+                        await this.handleTransakSuccess(transakOrder.id, {
+                            partnerOrderId: payment.id,
+                            cryptoAmount: payment.cryptoAmount,
+                            transactionHash: '0x' + Array(64).fill('0').map(() => Math.floor(Math.random() * 16).toString(16)).join('') // Mock Hash
+                        });
+                    } catch (err) {
+                        console.error('🧪 [DEMO] Simulation failed', err);
+                    }
+                }, 3000);
+            }
+            // -------------------------------------
 
         } catch (error: any) {
             console.error('Failed to create Transak order', { error: error.message });

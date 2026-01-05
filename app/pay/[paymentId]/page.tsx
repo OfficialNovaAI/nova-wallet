@@ -3,7 +3,8 @@
 import React, { useState, useEffect, use, useRef } from 'react';
 import axios from 'axios';
 import { QRCodeSVG } from 'qrcode.react';
-import { Loader2, CheckCircle2, AlertCircle, Copy, ExternalLink, RefreshCw } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, Copy, CreditCard, QrCode } from 'lucide-react';
+import Image from 'next/image';
 
 interface Payment {
     id: string;
@@ -24,23 +25,33 @@ interface Payment {
     midtransTransactionId?: string | null;
 }
 
+type ViewMode = 'LANDING' | 'QRIS' | 'TRANSAK' | 'SUCCESS' | 'PROCESSING';
+
 export default function PaymentPage({ params }: { params: Promise<{ paymentId: string }> }) {
     const { paymentId } = use(params);
     const [payment, setPayment] = useState<Payment | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [qrData, setQrData] = useState<string | null>(null); // QR code URL or data
+
+    // UI State
+    const [viewMode, setViewMode] = useState<ViewMode>('LANDING');
+    const [timeLeft, setTimeLeft] = useState<string>('');
+    const [pageUrl, setPageUrl] = useState<string>('');
+
+    // Gateway State
+    const [qrData, setQrData] = useState<string | null>(null); // QR code URL or data (or Transak URL)
     const [qrString, setQrString] = useState<string | null>(null); // QR string for rendering
     const [initializingGateway, setInitializingGateway] = useState(false);
 
     const hasLoadedRef = useRef(false);
-    const qrInitializedRef = useRef(false);
 
-    // 1. Load Payment
+    // 1. Initial Setup
     useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setPageUrl(window.location.href);
+        }
         if (hasLoadedRef.current) return;
         hasLoadedRef.current = true;
-
         loadPaymentDetails();
     }, [paymentId]);
 
@@ -54,27 +65,42 @@ export default function PaymentPage({ params }: { params: Promise<{ paymentId: s
         }
     }, [payment]);
 
+    // 3. Timer
+    useEffect(() => {
+        if (!payment?.expiresAt) return;
+
+        const updateTimer = () => {
+            const now = new Date().getTime();
+            const expire = new Date(payment.expiresAt).getTime();
+            const dist = expire - now;
+
+            if (dist < 0) {
+                setTimeLeft('Expired');
+            } else {
+                const h = Math.floor((dist % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const m = Math.floor((dist % (1000 * 60 * 60)) / (1000 * 60));
+                const s = Math.floor((dist % (1000 * 60)) / 1000);
+                setTimeLeft(`${h}h ${m}m ${s}s`);
+            }
+        };
+
+        const timer = setInterval(updateTimer, 1000);
+        updateTimer();
+        return () => clearInterval(timer);
+    }, [payment?.expiresAt]);
+
     const loadPaymentDetails = async () => {
         try {
             const response = await axios.get(`/api/payments/${paymentId}`);
             const paymentData = response.data.data;
             setPayment(paymentData);
 
-            if (['PAID_FIAT', 'PROCESSING_CRYPTO', 'COMPLETED'].includes(paymentData.status)) {
-                setLoading(false);
-                return;
-            }
-
-            // Initialize Payment Gateway
-            if (paymentData.paymentMethod === 'QRIS') {
-                if (!qrInitializedRef.current) {
-                    qrInitializedRef.current = true;
-                    setInitializingGateway(true);
-                    await initializeQRIS(paymentData);
-                    setInitializingGateway(false);
-                }
+            if (['PAID_FIAT', 'PROCESSING_CRYPTO'].includes(paymentData.status)) {
+                setViewMode('PROCESSING');
+            } else if (paymentData.status === 'COMPLETED') {
+                setViewMode('SUCCESS');
             } else {
-                await initializeTransak(paymentData);
+                setViewMode('LANDING'); // Default to Landing View
             }
 
             setLoading(false);
@@ -85,12 +111,25 @@ export default function PaymentPage({ params }: { params: Promise<{ paymentId: s
         }
     };
 
+    const handleSelectQRIS = async () => {
+        if (!payment) return;
+        setViewMode('QRIS');
+        setInitializingGateway(true);
+        await initializeQRIS(payment);
+        setInitializingGateway(false);
+    };
+
+    const handleSelectTransak = async () => {
+        if (!payment) return;
+        setViewMode('TRANSAK');
+        await initializeTransak(payment);
+    };
+
     const initializeQRIS = async (paymentData: Payment) => {
         try {
-            // 15000 is hardcoded rate for demo, real implementations should fetch rate or use stored conversion
+            // 15500 is hardcoded rate for demo
             const idrAmount = Math.round(paymentData.fiatAmount * 15500);
 
-            // Check if we already have ordered it (idempotency handled by API too)
             const response = await axios.post('/api/midtrans/create-qris', {
                 paymentId: paymentData.id,
                 amount: idrAmount
@@ -100,8 +139,8 @@ export default function PaymentPage({ params }: { params: Promise<{ paymentId: s
 
             if (qrResponse) {
                 if (qrResponse.isPaid || ['settlement', 'capture', 'success'].includes(qrResponse.status)) {
-                    // Already paid
                     setPayment(prev => prev ? { ...prev, status: 'PAID_FIAT' } : null);
+                    setViewMode('PROCESSING');
                     return;
                 }
 
@@ -122,7 +161,6 @@ export default function PaymentPage({ params }: { params: Promise<{ paymentId: s
     const initializeTransak = async (paymentData: Payment) => {
         try {
             const apiKey = process.env.NEXT_PUBLIC_TRANSAK_API_KEY || '00f0b025-1bda-4986-a1ea-49f33e1722a1';
-
             const transakParams = new URLSearchParams({
                 apiKey: apiKey,
                 environment: 'STAGING',
@@ -132,7 +170,7 @@ export default function PaymentPage({ params }: { params: Promise<{ paymentId: s
                 defaultNetwork: paymentData.network,
                 networks: 'ethereum,polygon,bsc,arbitrum,optimism',
                 walletAddress: paymentData.receiverWallet,
-                themeColor: '3b82f6', // blue-500
+                themeColor: '6C5DD3', // Matching design purple
                 hideMenu: 'true',
                 productsAvailed: 'BUY',
                 cryptoAmount: paymentData.cryptoAmount.toString(),
@@ -140,7 +178,7 @@ export default function PaymentPage({ params }: { params: Promise<{ paymentId: s
             });
 
             const transakUrl = `https://global-stg.transak.com?${transakParams.toString()}`;
-            setQrData(transakUrl); // Reusing qrData state for iframe URL for cleaner code
+            setQrData(transakUrl);
         } catch (err) {
             console.error('Error init Transak:', err);
         }
@@ -153,35 +191,32 @@ export default function PaymentPage({ params }: { params: Promise<{ paymentId: s
 
             setPayment(prev => {
                 if (!prev) return newData;
-                if (prev.status !== newData.status) return newData;
+                if (prev.status !== newData.status) {
+                    if (newData.status === 'COMPLETED') setViewMode('SUCCESS');
+                    else if (['PAID_FIAT', 'PROCESSING_CRYPTO'].includes(newData.status)) setViewMode('PROCESSING');
+                    return newData;
+                }
                 return prev;
             });
-        } catch (err) {
-            // Silent fail for polling
-        }
+        } catch (err) { }
     };
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-black flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-                    <p className="text-gray-400 animate-pulse">Loading secure payment...</p>
-                </div>
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <Loader2 className="w-12 h-12 text-[#6C5DD3] animate-spin" />
             </div>
         );
     }
 
     if (error) {
         return (
-            <div className="min-h-screen bg-black flex items-center justify-center p-4">
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 max-w-md w-full text-center">
-                    <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <AlertCircle className="w-8 h-8 text-red-500" />
-                    </div>
-                    <h2 className="text-xl font-bold text-white mb-2">Something went wrong</h2>
-                    <p className="text-gray-400 mb-6">{error}</p>
-                    <button onClick={() => window.location.reload()} className="px-6 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors">
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="bg-white shadow-xl rounded-2xl p-8 max-w-md w-full text-center border border-red-100">
+                    <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">Error</h2>
+                    <p className="text-gray-600 mb-6">{error}</p>
+                    <button onClick={() => window.location.reload()} className="w-full py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800">
                         Try Again
                     </button>
                 </div>
@@ -189,149 +224,198 @@ export default function PaymentPage({ params }: { params: Promise<{ paymentId: s
         );
     }
 
-    // SUCCESS STATE
-    if (payment?.status === 'COMPLETED') {
+    // LANDING VIEW (Refined Sizing)
+    if (viewMode === 'LANDING') {
         return (
-            <div className="min-h-screen bg-black flex items-center justify-center p-4">
-                <div className="bg-gray-900/50 backdrop-blur border border-green-500/20 rounded-3xl p-10 max-w-md w-full text-center relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-emerald-400"></div>
-
-                    <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <CheckCircle2 className="w-10 h-10 text-green-500" />
-                    </div>
-
-                    <h2 className="text-2xl font-bold text-white mb-2">Payment Successful!</h2>
-                    <p className="text-gray-400 mb-8">
-                        Your {payment.cryptoAmount} {payment.cryptoCurrency} has been sent.
-                    </p>
-
-                    {payment.txHash && (
-                        <a
-                            href={`https://etherscan.io/tx/${payment.txHash}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center gap-2 w-full py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl transition-all font-medium"
-                        >
-                            View on Explorer
-                            <ExternalLink className="w-4 h-4" />
-                        </a>
-                    )}
+            <div className="min-h-screen relative font-sans text-gray-900 selection:bg-purple-100 selection:text-purple-900 flex items-center justify-center">
+                {/* Background Image */}
+                <div className="fixed inset-0 z-0">
+                    <Image
+                        src="/paylink/bg-paylink.webp"
+                        alt="Background"
+                        fill
+                        className="object-cover"
+                        priority
+                    />
                 </div>
-            </div>
-        );
-    }
 
-    // PROCESSING STATE
-    if (['PAID_FIAT', 'PROCESSING_CRYPTO'].includes(payment?.status || '')) {
-        return (
-            <div className="min-h-screen bg-black flex items-center justify-center p-4">
-                <div className="bg-gray-900/50 backdrop-blur border border-blue-500/20 rounded-3xl p-10 max-w-md w-full text-center">
-                    <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6 relative">
-                        <div className="absolute inset-0 rounded-full border-4 border-blue-500/30 border-t-blue-500 animate-spin"></div>
-                        <RefreshCw className="w-8 h-8 text-blue-500 animate-pulse" />
-                    </div>
-
-                    <h2 className="text-2xl font-bold text-white mb-2">Processing Payment</h2>
-                    <p className="text-gray-400 mb-2">
-                        We received your payment!
-                    </p>
-                    <p className="text-sm text-gray-500">
-                        Converting and sending {payment?.cryptoCurrency} to your wallet...
-                    </p>
+                {/* Logo top left - Increased Size */}
+                <div className="fixed top-8 left-8 z-20">
+                    <Image
+                        src="/paylink/logo-paylink.webp"
+                        alt="Nova Paylink"
+                        width={200}
+                        height={60}
+                        className="h-12 w-auto object-contain"
+                    />
                 </div>
-            </div>
-        );
-    }
 
-    // DEFAULT: PAYMENT UI
-    return (
-        <div className="min-h-screen bg-black text-white py-12 px-4 font-sans">
-            <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Main Card - Tightened max-width */}
+                <div className="relative z-10 w-full max-w-[400px] px-4">
+                    <div className="bg-white rounded-[40px] p-8 shadow-[0_20px_60px_rgba(0,0,0,0.08)] animate-in fade-in zoom-in duration-500 text-center">
 
-                {/* Left: Details */}
-                <div className="space-y-6">
-                    <div className="bg-gray-900/50 border border-gray-800 rounded-3xl p-8">
-                        <h2 className="text-xl font-bold mb-6 text-gray-200">Payment Details</h2>
+                        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                            Pay Request for ${payment?.fiatAmount.toFixed(2)}
+                        </h1>
+                        <p className="text-gray-500 text-sm mb-8">
+                            Review the details and proceed with your payment
+                        </p>
 
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center py-3 border-b border-gray-800">
-                                <span className="text-gray-500">Amount</span>
-                                <span className="text-xl font-bold text-white">{payment?.cryptoAmount} <span className="text-blue-400">{payment?.cryptoCurrency}</span></span>
-                            </div>
-                            <div className="flex justify-between items-center py-3 border-b border-gray-800">
-                                <span className="text-gray-500">Fiat Equivalent</span>
-                                <span className="text-gray-300 font-mono">${payment?.fiatAmount.toFixed(2)} USD</span>
-                            </div>
-                            <div className="flex justify-between items-center py-3 border-b border-gray-800">
-                                <span className="text-gray-500">Network</span>
-                                <span className="text-gray-300 capitalize">{payment?.network}</span>
-                            </div>
-                            <div className="pt-2">
-                                <span className="text-gray-500 text-sm block mb-1">Receiver</span>
-                                <div className="flex items-center gap-2 bg-gray-950 p-3 rounded-lg border border-gray-800">
-                                    <span className="text-xs font-mono text-gray-400 truncate">{payment?.receiverWallet}</span>
-                                    <Copy className="w-4 h-4 text-gray-600 cursor-pointer hover:text-white transition-colors" />
+                        {/* QR Container - Adjusted internal spacing */}
+                        <div className="bg-[#F8F9FA] rounded-[32px] p-8 mb-6 border border-gray-100/50">
+                            <div className="flex flex-col items-center">
+                                <p className="text-sm text-gray-500 font-medium mb-1">Time left</p>
+                                <p className="text-xl font-bold text-gray-900 font-mono mb-6 tracking-tight">{timeLeft}</p>
+
+                                <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm mb-4">
+                                    {pageUrl && <QRCodeSVG value={pageUrl} size={160} level="M" />}
                                 </div>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div className="bg-blue-900/10 border border-blue-500/10 rounded-2xl p-6">
-                        <div className="flex items-start gap-4">
-                            <div className="w-2 h-2 mt-2 rounded-full bg-blue-500 animate-pulse"></div>
-                            <div>
-                                <h4 className="font-semibold text-blue-400 mb-1">{payment?.paymentMethod === 'QRIS' ? 'QRIS Payment' : 'Global Payment'}</h4>
-                                <p className="text-sm text-gray-400">
-                                    {payment?.paymentMethod === 'QRIS'
-                                        ? 'Scan the QR code with any supported Indonesian e-wallet (GoPay, OVO, Dana).'
-                                        : 'Complete the payment using your Credit/Debit card via Transak.'}
+                                <p className="text-xs text-gray-400 font-medium">
+                                    Scan to pay on mobile
                                 </p>
                             </div>
                         </div>
+
+                        {/* Buttons */}
+                        <div className="flex flex-col gap-3 w-full">
+                            <button
+                                onClick={handleSelectQRIS}
+                                className="w-full py-3.5 bg-[#6C5DD3] hover:bg-[#5b4ec2] active:scale-[0.98] text-white rounded-2xl font-semibold transition-all shadow-lg shadow-purple-200 flex items-center justify-center gap-2"
+                            >
+                                <QrCode className="w-5 h-5" />
+                                Pay with QRIS
+                            </button>
+
+                            <button
+                                onClick={handleSelectTransak}
+                                className="w-full py-3.5 bg-white border border-gray-200 hover:bg-gray-50 active:scale-[0.98] text-gray-700 rounded-2xl font-semibold transition-all flex items-center justify-center gap-2"
+                            >
+                                <CreditCard className="w-5 h-5" />
+                                Pay with Transak
+                            </button>
+                        </div>
+
                     </div>
                 </div>
+            </div>
+        );
+    }
 
-                {/* Right: Action/QR */}
-                <div className="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center justify-center text-center relative overflow-hidden h-[600px]">
-                    {/* Background Mesh (Visual) */}
-                    <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500"></div>
-
-                    {initializingGateway ? (
-                        <div className="flex flex-col items-center">
-                            <Loader2 className="w-8 h-8 text-gray-400 animate-spin mb-2" />
-                            <p className="text-gray-500 text-sm">Generating secure gateway...</p>
+    // QRIS VIEW
+    if (viewMode === 'QRIS') {
+        return (
+            <div className="min-h-screen bg-gray-50 text-gray-900 font-sans flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden flex flex-col min-h-[600px]">
+                    <div className="p-6 bg-[#6C5DD3] text-white flex items-center justify-between">
+                        <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setViewMode('LANDING')}>
+                            <span className="text-sm font-medium">&larr; Back</span>
                         </div>
-                    ) : payment?.paymentMethod === 'QRIS' ? (
-                        <div className="w-full h-full flex flex-col items-center justify-center">
-                            <h3 className="text-gray-900 font-bold text-xl mb-6">Scan to Pay</h3>
+                        <h2 className="font-bold">Scan QRIS</h2>
+                        <div className="w-8"></div>
+                    </div>
 
-                            <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-100 mb-6">
-                                {qrString ? (
-                                    <QRCodeSVG value={qrString} size={240} level="H" />
-                                ) : qrData ? (
-                                    <img src={qrData} alt="QRIS" className="w-60 h-60 object-contain" />
-                                ) : (
-                                    <div className="w-60 h-60 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">No QR Data</div>
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white relative">
+                        {initializingGateway ? (
+                            <div className="flex flex-col items-center">
+                                <Loader2 className="w-10 h-10 text-[#6C5DD3] animate-spin mb-4" />
+                                <p className="text-gray-500">Generating QR Code...</p>
+                            </div>
+                        ) : (
+                            <>
+                                <h3 className="text-xl font-bold mb-2">Rp {Math.round((payment?.fiatAmount || 0) * 15500).toLocaleString('id-ID')}</h3>
+                                <p className="text-gray-400 text-sm mb-8">Scan with GoPay, OVO, Dana, or BCA</p>
+
+                                <div className="bg-white p-4 rounded-2xl shadow-lg border border-gray-100 mb-8">
+                                    {qrString ? (
+                                        <QRCodeSVG value={qrString} size={220} level="H" />
+                                    ) : qrData ? (
+                                        <img src={qrData} alt="QRIS" className="w-56 h-56 object-contain" />
+                                    ) : (
+                                        <div className="w-56 h-56 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">Error Loading QR</div>
+                                    )}
+                                </div>
+
+                                {/* Simulator Helper */}
+                                {(qrString || qrData) && (
+                                    <div className="w-full bg-gray-50 rounded-lg p-3 border border-gray-200 mb-6">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-[10px] uppercase font-bold text-gray-400">Simulator Code</span>
+                                            <a href="https://simulator.sandbox.midtrans.com/v2/qris/index" target="_blank" className="text-[10px] text-[#6C5DD3] hover:underline">Open Simulator</a>
+                                        </div>
+                                        <code className="block text-[10px] text-left text-gray-500 break-all font-mono bg-white p-2 rounded border border-gray-100">
+                                            {qrString || qrData}
+                                        </code>
+                                    </div>
                                 )}
-                            </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
-                            <div className="flex items-center gap-4 opacity-60 grayscale hover:grayscale-0 transition-all">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/8/86/Gopay_logo.svg" alt="GoPay" className="h-6" />
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/e/eb/Logo_ovo_purple.svg" alt="OVO" className="h-6" />
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Logo_DANA.png/640px-Logo_DANA.png" alt="Dana" className="h-6" />
-                            </div>
-                        </div>
-                    ) : payment?.paymentMethod === 'TRANSAK' && qrData ? (
+    // TRANSAK VIEW
+    if (viewMode === 'TRANSAK') {
+        return (
+            <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+                <div className="w-full max-w-lg bg-white rounded-3xl shadow-xl overflow-hidden h-[700px] flex flex-col">
+                    <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white z-10">
+                        <button onClick={() => setViewMode('LANDING')} className="text-sm text-gray-500 hover:text-[#6C5DD3] transition-colors">
+                            &larr; Cancel
+                        </button>
+                        <span className="font-semibold text-gray-900">Pay with Card</span>
+                        <div className="w-10"></div>
+                    </div>
+                    {qrData ? (
                         <iframe
                             src={qrData}
-                            className="w-full h-full border-0"
+                            className="w-full flex-1 border-0"
                             allow="camera;microphone;payment;clipboard-write"
                         />
                     ) : (
-                        <p className="text-red-500">Unsupported Method</p>
+                        <div className="flex-1 flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 text-[#6C5DD3] animate-spin" />
+                        </div>
                     )}
                 </div>
+            </div>
+        );
+    }
 
+    // SUCCESS / PROCESSING VIEW
+    return (
+        <div className="min-h-screen bg-white flex items-center justify-center p-4 font-sans">
+            <div className="bg-white shadow-2xl rounded-3xl p-10 max-w-md w-full text-center border border-gray-100">
+                {viewMode === 'SUCCESS' ? (
+                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <CheckCircle2 className="w-10 h-10 text-green-600" />
+                    </div>
+                ) : (
+                    <div className="w-20 h-20 bg-[#6C5DD3]/10 rounded-full flex items-center justify-center mx-auto mb-6 relative">
+                        <Loader2 className="w-10 h-10 text-[#6C5DD3] animate-spin" />
+                    </div>
+                )}
+
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                    {viewMode === 'SUCCESS' ? 'Payment Successful!' : 'Processing Payment'}
+                </h2>
+                <p className="text-gray-500 mb-8 leading-relaxed">
+                    {viewMode === 'SUCCESS'
+                        ? `We have successfully received your payment of $${payment?.fiatAmount}.`
+                        : 'We are verifying your transaction. This may take a few moments.'}
+                </p>
+
+                {payment?.txHash && (
+                    <a
+                        href={`https://etherscan.io/tx/${payment.txHash}`}
+                        target="_blank"
+                        className="block w-full py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors font-medium"
+                    >
+                        View Transaction
+                    </a>
+                )}
             </div>
         </div>
     );
