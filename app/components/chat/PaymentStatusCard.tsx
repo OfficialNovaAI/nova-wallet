@@ -30,10 +30,11 @@ export function PaymentStatusCard({ paymentId, initialData }: PaymentStatusCardP
     }, []);
 
     useEffect(() => {
-        if (!initialData) fetchPaymentDetails();
+        // Only fetch if we have an ID and it's not the initial data
+        if (!initialData && paymentId) fetchPaymentDetails();
 
         const interval = setInterval(() => {
-            if (!isPaid) fetchPaymentDetails();
+            if (!isPaid && paymentId) fetchPaymentDetails();
         }, 4000);
 
         return () => clearInterval(interval);
@@ -73,10 +74,17 @@ export function PaymentStatusCard({ paymentId, initialData }: PaymentStatusCardP
     }, [payment]);
 
     const fetchPaymentDetails = async () => {
+        if (!paymentId) return;
+
         try {
             const res = await axios.get(`/api/payments/${paymentId}`);
             setPayment(res.data.data);
-        } catch (e) {
+        } catch (e: any) {
+            // Ignore 404s during initial polling (might take a sec to persist)
+            if (e.response && e.response.status === 404) {
+                console.warn("Payment not found yet, retrying...", paymentId);
+                return;
+            }
             console.error("Fetch details error", e);
         }
     };
