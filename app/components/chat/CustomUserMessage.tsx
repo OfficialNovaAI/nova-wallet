@@ -19,11 +19,7 @@ export function CustomUserMessage({ message }: UserMessageProps) {
 
     return (
         <div className="flex justify-end mb-4">
-            <div
-                className="bg-gradient-to-r from-purple-500 to-violet-600 
-                           text-white rounded-2xl px-5 py-3 
-                           max-w-[80%] shadow-sm"
-            >
+            <div className="bubble-chat text-white rounded-2xl px-5 py-3 max-w-[80%]">
                 <div className="text-sm leading-relaxed">
                     {renderContent()}
                 </div>

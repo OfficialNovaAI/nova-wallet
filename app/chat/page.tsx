@@ -1,27 +1,28 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useAccount, useSendTransaction, useChainId } from "wagmi";
+import { useState, useRef, useEffect } from "react";
+import { useAccount, useSendTransaction, useChainId, useSwitchChain } from "wagmi";
+import { supportedChains } from "@/config/chains";
 import { parseEther } from "viem";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { TokenSidebar } from "@/components/chat/TokenSidebar";
-import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { TransactionCard } from "@/components/chat/TransactionCard";
 import { BalanceCard } from "@/components/chat/BalanceCard";
 import { MultiChainBalanceCard } from "@/components/chat/MultiChainBalanceCard";
 import { InfoCard } from "@/components/chat/InfoCard";
-import { SlippageCard } from "@/components/chat/SlippageCard"; // NEW
+import { SlippageCard } from "@/components/chat/SlippageCard";
 import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { Button } from "@/components/ui/button";
-import { Wallet } from "lucide-react";
+import { Wallet, Sparkles, Send } from "lucide-react";
 import { toast } from "sonner";
 
 // CopilotKit Imports
-import { CopilotKit, useCopilotAction } from "@copilotkit/react-core";
+import { CopilotKit, useCopilotAction, useCopilotChat } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
+import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import "@copilotkit/react-ui/styles.css";
 
 export default function ChatPage() {
@@ -37,14 +38,16 @@ function ChatPageContent() {
     const chainId = useChainId();
     const { openConnectModal } = useConnectModal();
     const { sendTransaction } = useSendTransaction();
+    const { switchChainAsync } = useSwitchChain();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isMounted, setIsMounted] = useState(false);
+    const [showWelcome, setShowWelcome] = useState(true);
+    const [inputValue, setInputValue] = useState("");
+    const [hasStartedChat, setHasStartedChat] = useState(false);
+    const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
-    // Transaction state for Generative UI
-    const [pendingTransaction, setPendingTransaction] = useState<{
-        type: "send" | "receive";
-        data: any;
-    } | null>(null);
+    // useCopilotChat for programmatic message sending
+    const { appendMessage } = useCopilotChat();
 
     // State to store balance data for Generative UI
     const [balanceData, setBalanceData] = useState<{
@@ -53,6 +56,9 @@ function ChatPageContent() {
         chainName: string;
     } | null>(null);
 
+    // ============================================
+    // EXISTING ACTION: Check Balance
+    // ============================================
     useCopilotAction({
         name: "checkBalance",
         description: "Cek saldo wallet user di blockchain tertentu. Gunakan ini ketika user mau tahu saldo mereka, cek balance, atau lihat berapa crypto yang dimiliki.",
@@ -133,6 +139,9 @@ function ChatPageContent() {
         side: "buy" | "sell";
     } | null>(null);
 
+    // ============================================
+    // EXISTING ACTION: Check All Balances
+    // ============================================
     useCopilotAction({
         name: "checkAllBalances",
         description: "Cek saldo wallet user di SEMUA chain yang tersedia sekaligus. Gunakan ini ketika user mau lihat semua saldo, cek portfolio, atau lihat balance di setiap chain.",
@@ -144,7 +153,7 @@ function ChatPageContent() {
 
             try {
                 // Fetch balances from all supported chains
-                const chainIds = [11155111, 5003, 84532, 11155420, 4202, 80002, 421614];
+                const chainIds = [1, 5000, 11155111, 5003, 84532, 11155420, 4202, 80002, 421614];
                 const balancePromises = chainIds.map(async (cid) => {
                     try {
                         const response = await fetch("/api/wallet/balance", {
@@ -188,7 +197,7 @@ function ChatPageContent() {
                     <div className="bg-white rounded-2xl border border-gray-200 p-6 max-w-md mt-3 shadow-lg">
                         <div className="flex items-center gap-4">
                             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 
-                                          flex items-center justify-center animate-pulse">
+                                            flex items-center justify-center animate-pulse">
                                 <Wallet className="w-6 h-6 text-white" />
                             </div>
                             <div>
@@ -221,13 +230,16 @@ function ChatPageContent() {
         },
     });
 
+    // ============================================
+    // EXISTING ACTION: Prepare Transaction
+    // ============================================
     useCopilotAction({
         name: "prepareTransaction",
-        description: "Prepare a cryptocurrency transaction for the user to sign. Use this when the user wants to send money.",
+        description: "Prepare a cryptocurrency transaction for the user to sign. Use this when the user wants to send money. ALWAYS ask for the chain/network if not specified.",
         parameters: [
             { name: "recipient", type: "string", description: "The recipient wallet address (0x...)" },
             { name: "amount", type: "string", description: "The amount of native tokens to send (e.g., 0.1)" },
-            { name: "chainId", type: "number", description: "The chain ID for the transaction", required: false },
+            { name: "chainId", type: "number", description: "The chain ID for the transaction. MUST be one of: 1 (Mainnet), 5000 (Mantle), 11155111 (Sepolia), 5003 (Mantle Sepolia), 4202 (Lisk Sepolia), 84532 (Base Sepolia), 11155420 (Op Sepolia).", required: true },
         ],
         render: ({ status, args }) => {
             if (status === "executing") {
@@ -235,22 +247,41 @@ function ChatPageContent() {
             }
 
             if (status === "complete" && args.recipient && args.amount) {
+                const targetChainId = args.chainId || chainId;
+                const targetChain = supportedChains.find(c => c.id === targetChainId);
+                const tokenSymbol = targetChain?.symbol || "ETH"; // Default fallback
+                const networkName = targetChain?.name || "Unknown Network";
+
                 return (
                     <TransactionCard
                         type="send"
                         data={{
-                            token: "MNT",
+                            token: tokenSymbol,
                             amount: args.amount,
-                            network: "Mantle",
+                            network: networkName,
                             recipient: args.recipient,
-                            gasFee: "< 0.01 MNT",
+                            gasFee: "Calculated in wallet",
                         }}
                         onCancel={() => {
-                            setPendingTransaction(null);
                             toast.info("Transaction cancelled");
                         }}
-                        onConfirm={() => {
+                        onConfirm={async () => {
                             try {
+                                // 1. Check if we need to switch chain
+                                if (chainId !== targetChainId && targetChainId) {
+                                    toast.loading(`Switching to ${networkName}...`);
+                                    try {
+                                        await switchChainAsync({ chainId: targetChainId });
+                                        toast.dismiss();
+                                        toast.success(`Switched to ${networkName}`);
+                                    } catch (switchError) {
+                                        toast.dismiss();
+                                        toast.error("Failed to switch network");
+                                        return;
+                                    }
+                                }
+
+                                // 2. Send Transaction
                                 sendTransaction({
                                     to: args.recipient as `0x${string}`,
                                     value: parseEther(args.amount),
@@ -259,7 +290,6 @@ function ChatPageContent() {
                                         toast.success("Transaction submitted!", {
                                             description: `Hash: ${hash.slice(0, 10)}...${hash.slice(-8)}`
                                         });
-                                        setPendingTransaction(null);
                                     },
                                     onError: (error) => {
                                         toast.error("Transaction failed", {
@@ -267,8 +297,9 @@ function ChatPageContent() {
                                         });
                                     }
                                 });
-                            } catch (error: any) {
-                                toast.error("Error", { description: error.message });
+                            } catch (error) {
+                                const errorMessage = error instanceof Error ? error.message : "Unknown error";
+                                toast.error("Error", { description: errorMessage });
                             }
                         }}
                     />
@@ -293,10 +324,17 @@ function ChatPageContent() {
                 return "Invalid amount. Please provide a valid positive number.";
             }
 
-            return `Transaction prepared: Sending ${amount} tokens to ${recipient}. Please confirm the transaction in the UI above.`;
+            // Validate Chain
+            const chainInfo = supportedChains.find(c => c.id === targetChainId);
+            const chainName = chainInfo?.name || `Chain ID ${targetChainId}`;
+
+            return `Transaction prepared: Sending ${amount} ${chainInfo?.symbol || 'tokens'} to ${recipient} on ${chainName}. Please confirm in the card above.`;
         },
     });
 
+    // ============================================
+    // EXISTING ACTION: Predict Trade Cost
+    // ============================================
     useCopilotAction({
         name: "predictTradeCost",
         description: "Predicts execution cost and slippage for a trade. Use this when user wants to analyze trade cost, check slippage, or compare exchanges for CEX (Binance, Kraken, etc).",
@@ -312,7 +350,6 @@ function ChatPageContent() {
                         symbol={slippageDataRef.current.symbol}
                         amount={slippageDataRef.current.amount}
                         side={slippageDataRef.current.side}
-                        bestVenue={slippageDataRef.current.best_venue}
                         quotes={slippageDataRef.current.quotes}
                     />
                 );
@@ -371,6 +408,9 @@ function ChatPageContent() {
         },
     });
 
+    // ============================================
+    // EXISTING ACTION: Show Receive Address
+    // ============================================
     useCopilotAction({
         name: "showReceiveAddress",
         description: "Tampilkan alamat wallet user dengan QR code untuk menerima crypto. Gunakan ini ketika user ingin menerima token, melihat alamat wallet mereka, meminta QR code, atau share address.",
@@ -402,7 +442,9 @@ function ChatPageContent() {
         },
     });
 
-    // Generative UI: Display information in card format (NOT for balance!)
+    // ============================================
+    // EXISTING ACTION: Display Info Card
+    // ============================================
     useCopilotAction({
         name: "displayInfoCard",
         description: "Tampilkan informasi umum dalam format card. JANGAN gunakan untuk menampilkan saldo/balance - gunakan checkBalance atau checkAllBalances untuk itu. Gunakan displayInfoCard hanya untuk: tips crypto, penjelasan blockchain, status transaksi, atau informasi edukasi.",
@@ -456,9 +498,259 @@ function ChatPageContent() {
         },
     });
 
+    // ============================================
+    // NEW ACTION 1: Analyze Portfolio (All Tokens)
+    // ============================================
+    useCopilotAction({
+        name: "analyzePortfolio",
+        description: "Analisis portfolio lengkap wallet: semua token holdings (native + ERC-20), nilai USD, profit/loss. Gunakan ini ketika user bertanya 'portfolio aku', 'analyze address 0x...', 'holdings', dll.",
+        parameters: [
+            { name: "targetAddress", type: "string", description: "Wallet address to analyze (0x...). If not provided, uses connected wallet address.", required: false },
+            { name: "chainId", type: "number", description: "Chain ID untuk analisis (default: chain yang sedang aktif)", required: false },
+        ],
+        handler: async ({ targetAddress, chainId: targetChainId }) => {
+            console.log("🔥 analyzePortfolio action called!", { targetAddress, targetChainId });
+
+            // Use provided address or fall back to connected wallet
+            const walletAddress = targetAddress || address;
+
+            if (!walletAddress) {
+                return "No address provided and wallet is not connected. Please provide an address (0x...) or connect your wallet.";
+            }
+
+            try {
+                const resolvedChainId = targetChainId || chainId;
+
+                // Call blockchain API route (server-side)
+                const response = await fetch('/api/blockchain', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'portfolio',
+                        address: walletAddress,
+                        chainId: resolvedChainId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch portfolio data');
+                }
+
+                const { data: result } = await response.json();
+
+                if (result.data.type === 'portfolio') {
+                    const portfolio = result.data.analysis;
+
+                    // Format response for AI
+                    let response = `✅ Portfolio Analysis Complete (${result.chain}):\n\n`;
+                    const nativeTokenSymbol = result.metadata?.nativeToken || 'ETH';
+                    response += `💰 Native Balance: ${portfolio.nativeBalance.toFixed(4)} ${nativeTokenSymbol}\n`;
+                    response += `💵 Native Value: $${portfolio.nativeValueUSD.toFixed(2)}\n\n`;
+
+                    if (portfolio.numTokens > 0) {
+                        response += `📊 Token Holdings (${portfolio.numTokens} tokens):\n`;
+                        portfolio.tokenHoldings.slice(0, 5).forEach((token: any, i: number) => {
+                            response += `${i + 1}. ${token.tokenSymbol}: ${token.balance.toFixed(4)} tokens\n`;
+                            response += `   Value: $${token.currentValueUSD.toFixed(2)} | P&L: ${token.pnlPercentage > 0 ? '+' : ''}${token.pnlPercentage.toFixed(2)}%\n`;
+                        });
+
+                        response += `\n💼 Total Portfolio: $${portfolio.totalPortfolioValueUSD.toFixed(2)}\n`;
+                        response += `📈 Total P&L: ${portfolio.totalPnLPercentage > 0 ? '+' : ''}${portfolio.totalPnLPercentage.toFixed(2)}%`;
+                    } else {
+                        response += `ℹ️ No ERC-20 tokens found. Only native balance available.`;
+                    }
+
+                    return response;
+                }
+
+                return "Failed to analyze portfolio. Please try again.";
+            } catch (error: any) {
+                console.error("Portfolio analysis error:", error);
+                return `Error analyzing portfolio: ${error.message}`;
+            }
+        },
+        render: ({ status }) => {
+            if (status === "executing") {
+                return <div className="text-sm text-muted-foreground animate-pulse">🔍 Analyzing on-chain portfolio data...</div>;
+            }
+            return <></>;
+        },
+    });
+
+    // ============================================
+    // NEW ACTION 2: Analyze Token Activity (Trading History)
+    // ============================================
+    useCopilotAction({
+        name: "analyzeTokenActivity",
+        description: "Analisis aktivitas trading wallet user: token yang dibeli/dijual, profit/loss per token, performa trading. Gunakan ini ketika user tanya 'profit aku berapa', 'token apa yang paling untung', 'rugi berapa', 'riwayat trading', dll.",
+        parameters: [
+            { name: "chainId", type: "number", description: "Chain ID untuk analisis", required: false },
+            { name: "timeframeDays", type: "number", description: "Timeframe dalam hari (30, 90, 365, atau all-time)", required: false },
+        ],
+        handler: async ({ chainId: targetChainId, timeframeDays }) => {
+            console.log("🔥 analyzeTokenActivity action called!", { targetChainId, timeframeDays });
+
+            if (!isConnected || !address) {
+                return "User wallet belum terkoneksi. Minta user untuk connect wallet dulu.";
+            }
+
+            try {
+                const resolvedChainId = targetChainId || chainId;
+
+                // Call blockchain API route (server-side)
+                const response = await fetch('/api/blockchain', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'token_activity',
+                        address,
+                        chainId: resolvedChainId,
+                        timeframeDays
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch token activity');
+                }
+
+                const { data: result } = await response.json();
+
+                if (result.data.type === 'token_activity') {
+                    const activity = result.data.analysis;
+                    const summary = activity.summary;
+
+                    let response = `✅ Token Activity Analysis (${result.chain}):\n\n`;
+                    response += `📊 Trading Summary:\n`;
+                    response += `• Tokens Bought: ${summary.numTokensBought}\n`;
+                    response += `• Tokens Sold: ${summary.numTokensSold}\n`;
+                    response += `• Total Invested: $${summary.totalInvestedUSD.toFixed(2)}\n`;
+                    response += `• Current Value: $${summary.currentPortfolioValueUSD.toFixed(2)}\n`;
+                    response += `• P&L: ${summary.totalPnLPercentage > 0 ? '+' : ''}${summary.totalPnLPercentage.toFixed(2)}% ($${summary.totalPnL > 0 ? '+' : ''}${summary.totalPnL.toFixed(2)})\n\n`;
+
+                    if (summary.mostProfitableToken) {
+                        const best = summary.mostProfitableToken;
+                        response += `🏆 Most Profitable: ${best.tokenSymbol}\n`;
+                        response += `   P&L: +${best.pnlPercentage.toFixed(2)}% ($${best.pnl.toFixed(2)})\n\n`;
+                    }
+
+                    if (summary.biggestLoserToken && summary.biggestLoserToken.pnl < 0) {
+                        const worst = summary.biggestLoserToken;
+                        response += `📉 Biggest Loss: ${worst.tokenSymbol}\n`;
+                        response += `   P&L: ${worst.pnlPercentage.toFixed(2)}% ($${worst.pnl.toFixed(2)})\n`;
+                    }
+
+                    return response;
+                }
+
+                return "Failed to analyze token activity. Please try again.";
+            } catch (error: any) {
+                console.error("Token activity error:", error);
+                return `Error analyzing trading activity: ${error.message}`;
+            }
+        },
+        render: ({ status }) => {
+            if (status === "executing") {
+                return <div className="text-sm text-muted-foreground animate-pulse">📊 Analyzing trading history & P&L...</div>;
+            }
+            return <></>;
+        },
+    });
+
+    // ============================================
+    // NEW ACTION 3: Transaction Stats (Gas, Activity)
+    // ============================================
+    useCopilotAction({
+        name: "getTransactionStats",
+        description: "Dapatkan statistik transaksi wallet user: total transaksi, gas fees yang dipakai, aktivitas wallet. Gunakan ini ketika user tanya 'berapa gas yang aku habiskan', 'seberapa aktif wallet aku', 'total transaksi', dll.",
+        parameters: [
+            { name: "chainId", type: "number", description: "Chain ID untuk analisis", required: false },
+        ],
+        handler: async ({ chainId: targetChainId }) => {
+            console.log("🔥 getTransactionStats action called!", { targetChainId });
+
+            if (!isConnected || !address) {
+                return "User wallet belum terkoneksi. Minta user untuk connect wallet dulu.";
+            }
+
+            try {
+                const resolvedChainId = targetChainId || chainId;
+
+                // Call blockchain API route (server-side)
+                const response = await fetch('/api/blockchain', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'transaction_stats',
+                        address,
+                        chainId: resolvedChainId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch transaction stats');
+                }
+
+                const { data: result } = await response.json();
+
+                if (result.data.type === 'transaction_stats') {
+                    const stats = result.data.stats;
+
+                    let response = `✅ Transaction Statistics (${result.chain}):\n\n`;
+                    response += `📈 Activity Overview:\n`;
+                    response += `• Total Transactions: ${stats.totalTransactions}\n`;
+                    response += `• Sent: ${stats.transactionsSent} | Received: ${stats.transactionsReceived}\n`;
+                    response += `• Native Txs: ${stats.ethTransactions} | Token Txs: ${stats.erc20Transactions}\n\n`;
+
+                    response += `⛽ Gas Spending:\n`;
+                    response += `• Total Gas Spent: $${stats.totalGasSpentUSD.toFixed(2)}\n`;
+                    response += `• Average per Tx: $${stats.averageGasPerTxUSD.toFixed(4)}\n\n`;
+
+                    response += `📅 Account Info:\n`;
+                    response += `• Account Age: ${stats.accountAgeDays} days\n`;
+                    response += `• Activity Level: ${stats.activityFrequency}\n`;
+
+                    return response;
+                }
+
+                return "Failed to get transaction stats. Please try again.";
+            } catch (error: any) {
+                console.error("Transaction stats error:", error);
+                return `Error getting transaction stats: ${error.message}`;
+            }
+        },
+        render: ({ status }) => {
+            if (status === "executing") {
+                return <div className="text-sm text-muted-foreground animate-pulse">⛽ Calculating gas & transaction stats...</div>;
+            }
+            return <></>;
+        },
+    });
+
     useEffect(() => {
         setIsMounted(true);
     }, []);
+
+    // Send pending message after CopilotChat mounts
+    useEffect(() => {
+        if (pendingMessage && hasStartedChat) {
+            const sendPendingMessage = async () => {
+                try {
+                    await appendMessage(
+                        new TextMessage({
+                            role: MessageRole.User,
+                            content: pendingMessage,
+                        })
+                    );
+                    setPendingMessage(null);
+                } catch (error) {
+                    console.error("Error sending message:", error);
+                }
+            };
+            // Small delay to ensure CopilotChat is mounted
+            const timer = setTimeout(sendPendingMessage, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [pendingMessage, hasStartedChat, appendMessage]);
 
     if (!isMounted) return null;
 
@@ -497,23 +789,90 @@ function ChatPageContent() {
                 <TokenSidebar isOpen={sidebarOpen} />
 
                 {/* CopilotKit Chat UI */}
-                <main className="flex-1 flex flex-col min-h-0 h-full">
-                    {/* Chat Status Header */}
-                    <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
-                        Right now you&apos;re in chat with Nova AI
-                    </div>
+                <main className="flex-1 flex flex-col min-h-0 h-full relative">
+                    {/* Welcome Screen with Input */}
+                    {showWelcome ? (
+                        <div className="flex-1 flex flex-col">
+                            {/* Chat Status Header */}
+                            <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
+                                Right now you&apos;re in chat with Nova AI
+                            </div>
 
-                    <div className="flex-1 min-h-0 h-full overflow-hidden">
-                        <CopilotChat
-                            className="h-full w-full"
-                            labels={{
-                                title: "Nova AI",
-                                initial: "Halo! Saya Nova AI, asisten crypto wallet kamu. Saya bisa bantu cek saldo, kirim crypto, dan menjawab pertanyaan tentang blockchain. Mau aku bantu apa hari ini?",
-                                placeholder: "Tanya Nova AI tentang wallet atau crypto...",
-                            }}
-                            UserMessage={CustomUserMessage}
-                            Input={CustomChatInput}
-                            instructions={`Kamu adalah Nova AI, asisten crypto wallet yang ramah dan helpful. Selalu gunakan Bahasa Indonesia.
+                            {/* Welcome Screen Content */}
+                            <div className="flex-1 flex items-center justify-center overflow-auto">
+                                <WelcomeScreen
+                                    onActionClick={(action) => {
+                                        const actionMessages: Record<string, string> = {
+                                            send: "Saya ingin mengirim crypto",
+                                            receive: "Tampilkan alamat wallet saya",
+                                            swap: "Saya ingin swap token",
+                                            paylink: "Buat payment link"
+                                        };
+                                        setInputValue(actionMessages[action]);
+                                    }}
+                                />
+                            </div>
+
+                            {/* Custom Input at Bottom - Match CopilotChat Input Design */}
+                            <div className="p-4 border-t border-gray-100 bg-gray-50/50">
+                                <form
+                                    onSubmit={async (e) => {
+                                        e.preventDefault();
+                                        if (inputValue.trim()) {
+                                            const message = inputValue.trim();
+                                            setInputValue("");
+                                            setShowWelcome(false);
+                                            setHasStartedChat(true);
+                                            setPendingMessage(message);
+                                        }
+                                    }}
+                                >
+                                    <div className="flex items-center gap-3 bg-gray-100 rounded-full px-4 py-3 shadow-sm">
+                                        {/* Sparkle Icon */}
+                                        <Sparkles className="w-5 h-5 text-purple-500 flex-shrink-0" />
+
+                                        {/* Input Field */}
+                                        <input
+                                            type="text"
+                                            value={inputValue}
+                                            onChange={(e) => setInputValue(e.target.value)}
+                                            placeholder="Ask Nova AI about your wallet, markets, or transactions..."
+                                            className="flex-1 bg-transparent border-none outline-none text-sm text-gray-800 placeholder-gray-500"
+                                        />
+
+                                        {/* Send Button */}
+                                        <button
+                                            type="submit"
+                                            disabled={!inputValue.trim()}
+                                            className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shadow-md"
+                                        >
+                                            <Send className="w-4 h-4 text-white" />
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Chat Status Header */}
+                            <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
+                                Right now you&apos;re in chat with Nova AI
+                            </div>
+
+                            {/* CopilotChat - Only shown after welcome */}
+                            <div className="flex-1 min-h-0 h-full overflow-hidden">
+                                {hasStartedChat && (
+                                    <CopilotChat
+                                        className="h-full w-full"
+                                        labels={{
+                                            title: "Nova AI",
+                                            initial: "",
+                                            placeholder: "Tanya Nova AI tentang wallet atau crypto...",
+                                        }}
+                                        UserMessage={CustomUserMessage}
+                                        Input={CustomChatInput}
+                                        makeSystemMessage={() => ""}
+                                        instructions={`Kamu adalah Nova AI, asisten crypto wallet yang ramah dan helpful. Selalu gunakan Bahasa Indonesia.
 
 TOOLS YANG TERSEDIA:
 1. checkBalance - Cek saldo di SATU chain tertentu
@@ -535,8 +894,11 @@ CONTOH:
 - "apa itu blockchain?" → gunakan displayInfoCard untuk penjelasan
 
 Wallet user: ${address} | Chain ID: ${chainId}`}
-                        />
-                    </div>
+                                    />
+                                )}
+                            </div>
+                        </>
+                    )}
                 </main>
             </div>
         </div>
