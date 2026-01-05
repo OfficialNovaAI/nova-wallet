@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useAccount, useSendTransaction, useChainId } from "wagmi";
+import { useAccount, useSendTransaction, useChainId, useSwitchChain } from "wagmi";
+import { supportedChains } from "@/config/chains";
 import { parseEther } from "viem";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { ChatHeader } from "@/components/chat/ChatHeader";
@@ -37,6 +38,7 @@ function ChatPageContent() {
     const chainId = useChainId();
     const { openConnectModal } = useConnectModal();
     const { sendTransaction } = useSendTransaction();
+    const { switchChainAsync } = useSwitchChain();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [isMounted, setIsMounted] = useState(false);
     const [showWelcome, setShowWelcome] = useState(true);
@@ -151,7 +153,7 @@ function ChatPageContent() {
 
             try {
                 // Fetch balances from all supported chains
-                const chainIds = [11155111, 5003, 84532, 11155420, 4202, 80002, 421614];
+                const chainIds = [1, 5000, 11155111, 5003, 84532, 11155420, 4202, 80002, 421614];
                 const balancePromises = chainIds.map(async (cid) => {
                     try {
                         const response = await fetch("/api/wallet/balance", {
@@ -233,11 +235,11 @@ function ChatPageContent() {
     // ============================================
     useCopilotAction({
         name: "prepareTransaction",
-        description: "Prepare a cryptocurrency transaction for the user to sign. Use this when the user wants to send money.",
+        description: "Prepare a cryptocurrency transaction for the user to sign. Use this when the user wants to send money. ALWAYS ask for the chain/network if not specified.",
         parameters: [
             { name: "recipient", type: "string", description: "The recipient wallet address (0x...)" },
             { name: "amount", type: "string", description: "The amount of native tokens to send (e.g., 0.1)" },
-            { name: "chainId", type: "number", description: "The chain ID for the transaction", required: false },
+            { name: "chainId", type: "number", description: "The chain ID for the transaction. MUST be one of: 1 (Mainnet), 5000 (Mantle), 11155111 (Sepolia), 5003 (Mantle Sepolia), 4202 (Lisk Sepolia), 84532 (Base Sepolia), 11155420 (Op Sepolia).", required: true },
         ],
         render: ({ status, args }) => {
             if (status === "executing") {
@@ -245,21 +247,41 @@ function ChatPageContent() {
             }
 
             if (status === "complete" && args.recipient && args.amount) {
+                const targetChainId = args.chainId || chainId;
+                const targetChain = supportedChains.find(c => c.id === targetChainId);
+                const tokenSymbol = targetChain?.symbol || "ETH"; // Default fallback
+                const networkName = targetChain?.name || "Unknown Network";
+
                 return (
                     <TransactionCard
                         type="send"
                         data={{
-                            token: "MNT",
+                            token: tokenSymbol,
                             amount: args.amount,
-                            network: "Mantle",
+                            network: networkName,
                             recipient: args.recipient,
-                            gasFee: "< 0.01 MNT",
+                            gasFee: "Calculated in wallet",
                         }}
                         onCancel={() => {
                             toast.info("Transaction cancelled");
                         }}
-                        onConfirm={() => {
+                        onConfirm={async () => {
                             try {
+                                // 1. Check if we need to switch chain
+                                if (chainId !== targetChainId && targetChainId) {
+                                    toast.loading(`Switching to ${networkName}...`);
+                                    try {
+                                        await switchChainAsync({ chainId: targetChainId });
+                                        toast.dismiss();
+                                        toast.success(`Switched to ${networkName}`);
+                                    } catch (switchError) {
+                                        toast.dismiss();
+                                        toast.error("Failed to switch network");
+                                        return;
+                                    }
+                                }
+
+                                // 2. Send Transaction
                                 sendTransaction({
                                     to: args.recipient as `0x${string}`,
                                     value: parseEther(args.amount),
@@ -302,7 +324,11 @@ function ChatPageContent() {
                 return "Invalid amount. Please provide a valid positive number.";
             }
 
-            return `Transaction prepared: Sending ${amount} tokens to ${recipient}. Please confirm the transaction in the UI above.`;
+            // Validate Chain
+            const chainInfo = supportedChains.find(c => c.id === targetChainId);
+            const chainName = chainInfo?.name || `Chain ID ${targetChainId}`;
+
+            return `Transaction prepared: Sending ${amount} ${chainInfo?.symbol || 'tokens'} to ${recipient} on ${chainName}. Please confirm in the card above.`;
         },
     });
 
