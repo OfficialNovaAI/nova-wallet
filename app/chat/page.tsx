@@ -921,9 +921,12 @@ function ChatPageContent() {
                                             send: "Saya ingin mengirim crypto",
                                             receive: "Tampilkan alamat wallet saya",
                                             swap: "Saya ingin swap token",
-                                            paylink: "Buat payment link"
+                                            paylink: "Buat payment link",
+                                            portfolio: "Cek portfolio saya",
+                                            search: "Saya ingin mencari transaksi onchain",
+                                            slippage: "Prediksi slippage untuk trading"
                                         };
-                                        setInputValue(actionMessages[action]);
+                                        setInputValue(actionMessages[action] || "");
                                     }}
                                 />
                             </div>
@@ -933,7 +936,7 @@ function ChatPageContent() {
                                 <form
                                     onSubmit={async (e) => {
                                         e.preventDefault();
-                                        if (inputValue.trim()) {
+                                        if (inputValue?.trim()) {
                                             const message = inputValue.trim();
                                             setInputValue("");
                                             setShowWelcome(false);
@@ -949,7 +952,7 @@ function ChatPageContent() {
                                         {/* Input Field */}
                                         <input
                                             type="text"
-                                            value={inputValue}
+                                            value={inputValue || ""}
                                             onChange={(e) => setInputValue(e.target.value)}
                                             placeholder="Ask Nova AI about your wallet, markets, or transactions..."
                                             className="flex-1 bg-transparent border-none outline-none text-sm text-gray-800 placeholder-gray-500"
@@ -958,7 +961,7 @@ function ChatPageContent() {
                                         {/* Send Button */}
                                         <button
                                             type="submit"
-                                            disabled={!inputValue.trim()}
+                                            disabled={!inputValue?.trim()}
                                             className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shadow-md"
                                         >
                                             <Send className="w-4 h-4 text-white" />
