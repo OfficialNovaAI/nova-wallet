@@ -896,25 +896,22 @@ function ChatPageContent() {
     }
 
     return (
-        <div className="h-screen flex flex-col bg-background">
-            <ChatHeader
-                sidebarOpen={sidebarOpen}
-                onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-            />
+        <div className="h-screen flex bg-background">
+            {/* Sidebar on the Left */}
+            <TokenSidebar isOpen={sidebarOpen} />
 
-            <div className="flex-1 flex overflow-hidden min-h-0">
-                {/* Your Custom Sidebar - TETAP */}
-                <TokenSidebar isOpen={sidebarOpen} />
+            {/* Main Content Area (Header + Chat) on the Right */}
+            <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden">
+                <ChatHeader
+                    sidebarOpen={sidebarOpen}
+                    onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                />
 
-                {/* CopilotKit Chat UI */}
-                <main className="flex-1 flex flex-col min-h-0 h-full relative">
+                {/* Chat Container */}
+                <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden">
                     {/* Welcome Screen with Input */}
                     {showWelcome ? (
                         <div className="flex-1 flex flex-col">
-                            {/* Chat Status Header */}
-                            <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
-                                Right now you&apos;re in chat with Nova AI
-                            </div>
 
                             {/* Welcome Screen Content */}
                             <div className="flex-1 flex items-center justify-center overflow-auto">
@@ -972,10 +969,6 @@ function ChatPageContent() {
                         </div>
                     ) : (
                         <>
-                            {/* Chat Status Header */}
-                            <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
-                                Right now you&apos;re in chat with Nova AI
-                            </div>
 
                             {/* CopilotChat - Only shown after welcome */}
                             <div className="flex-1 min-h-0 h-full overflow-hidden">
