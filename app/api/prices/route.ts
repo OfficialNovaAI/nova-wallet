@@ -8,6 +8,9 @@ const TOKEN_IDS: Record<string, string> = {
     'ETH': 'ethereum',
     'MNT': 'mantle',
     'LSK': 'lisk',
+    'MATIC': 'matic-network', // Updated to correct CoinGecko ID
+    'POL': 'matic-network',
+    'USDC': 'usd-coin',
 };
 
 export async function POST(request: Request) {
@@ -35,9 +38,9 @@ export async function POST(request: Request) {
             );
         }
 
-        // Fetch prices from CoinGecko
+        // Fetch prices from CoinGecko with 24h change
         const response = await fetch(
-            `${COINGECKO_API}?ids=${ids}&vs_currencies=usd`,
+            `${COINGECKO_API}?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
             {
                 headers: {
                     'Accept': 'application/json',
@@ -53,11 +56,16 @@ export async function POST(request: Request) {
         const data = await response.json();
 
         // Convert back to symbol-based format
-        const prices: Record<string, number> = {};
+        // Structure: { ETH: { price: 3000, change: 2.5 } }
+        const prices: Record<string, { price: number; change: number }> = {};
+
         symbols.forEach(symbol => {
             const id = TOKEN_IDS[symbol];
-            if (id && data[id]?.usd) {
-                prices[symbol] = data[id].usd;
+            if (id && data[id]) {
+                prices[symbol] = {
+                    price: data[id].usd || 0,
+                    change: data[id].usd_24h_change || 0
+                };
             }
         });
 
