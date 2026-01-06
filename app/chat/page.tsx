@@ -16,7 +16,7 @@ import { CustomUserMessage } from "@/components/chat/CustomUserMessage";
 import { CustomChatInput } from "@/components/chat/CustomChatInput";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { Button } from "@/components/ui/button";
-import { Wallet, Sparkles, Send } from "lucide-react";
+import { Wallet, Sparkles, Send, Activity, Fuel, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 // CopilotKit Imports
@@ -24,6 +24,16 @@ import { CopilotKit, useCopilotAction, useCopilotChat } from "@copilotkit/react-
 import { CopilotChat } from "@copilotkit/react-ui";
 import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import "@copilotkit/react-ui/styles.css";
+
+// New Generative UI Components
+import { PortfolioCard } from "@/components/chat/PortfolioCard";
+import { TokenActivityCard } from "@/components/chat/TokenActivityCard";
+import { TransactionStatsCard } from "@/components/chat/TransactionStatsCard";
+import { CreatePaymentForm } from "@/components/chat/CreatePaymentForm";
+import { PaymentStatusCard } from "@/components/chat/PaymentStatusCard";
+import { SendTransactionForm } from "@/components/chat/forms/SendTransactionForm";
+import { SlippageForm } from "@/components/chat/forms/SlippageForm";
+import axios from "axios";
 
 export default function ChatPage() {
     return (
@@ -139,6 +149,12 @@ function ChatPageContent() {
         side: "buy" | "sell";
     } | null>(null);
 
+    // State for Portfolio Data
+    const portfolioDataRef = useRef<any>(null);
+    const tokenActivityDataRef = useRef<any>(null);
+    const transactionStatsDataRef = useRef<any>(null);
+    const paymentLinkDataRef = useRef<any>(null);
+
     // ============================================
     // EXISTING ACTION: Check All Balances
     // ============================================
@@ -235,13 +251,37 @@ function ChatPageContent() {
     // ============================================
     useCopilotAction({
         name: "prepareTransaction",
-        description: "Prepare a cryptocurrency transaction for the user to sign. Use this when the user wants to send money. ALWAYS ask for the chain/network if not specified.",
+        description: "Prepare a cryptocurrency transaction. IMPORTANT: If recipient or amount is missing, DO NOT ASK in chat. Call this tool immediately with empty arguments so the interactive form appears.",
         parameters: [
             { name: "recipient", type: "string", description: "The recipient wallet address (0x...)" },
             { name: "amount", type: "string", description: "The amount of native tokens to send (e.g., 0.1)" },
             { name: "chainId", type: "number", description: "The chain ID for the transaction. MUST be one of: 1 (Mainnet), 5000 (Mantle), 11155111 (Sepolia), 5003 (Mantle Sepolia), 4202 (Lisk Sepolia), 84532 (Base Sepolia), 11155420 (Op Sepolia).", required: true },
         ],
         render: ({ status, args }) => {
+            // Case 1: Execution started but arguments missing (triggered by button click)
+            // Or explicitly executing but waiting for args
+            if (status === "executing" && (!args.recipient || !args.amount)) {
+                return (
+                    <div className="mt-2">
+                        <SendTransactionForm
+                            defaultValues={{
+                                recipient: args.recipient,
+                                amount: args.amount,
+                            }}
+                            onSubmit={async (data) => {
+                                const msg = `Send ${data.amount} ${data.token} to ${data.recipient}`;
+                                await appendMessage(
+                                    new TextMessage({
+                                        role: MessageRole.User,
+                                        content: msg,
+                                    })
+                                );
+                            }}
+                        />
+                    </div>
+                );
+            }
+
             if (status === "executing") {
                 return <div className="text-muted-foreground">Preparing transaction...</div>;
             }
@@ -354,6 +394,29 @@ function ChatPageContent() {
                     />
                 );
             }
+            if (status === "executing" && (!args.symbol || !args.amount)) {
+                return (
+                    <div className="mt-2">
+                        <SlippageForm
+                            defaultValues={{
+                                symbol: args.symbol,
+                                amount: args.amount ? String(args.amount) : undefined,
+                                side: args.side as "buy" | "sell"
+                            }}
+                            onSubmit={async (data) => {
+                                const msg = `Analyze slippage for ${data.side} ${data.amount} ${data.symbol}`;
+                                await appendMessage(
+                                    new TextMessage({
+                                        role: MessageRole.User,
+                                        content: msg,
+                                    })
+                                );
+                            }}
+                        />
+                    </div>
+                );
+            }
+
             if (status === "executing") {
                 return <div className="text-sm text-gray-500 italic animate-pulse">🤖 Analyzing market depth & predicted slippage...</div>;
             }
@@ -539,28 +602,15 @@ function ChatPageContent() {
                 const { data: result } = await response.json();
 
                 if (result.data.type === 'portfolio') {
-                    const portfolio = result.data.analysis;
+                    // Update state to render UI
+                    portfolioDataRef.current = {
+                        chainName: result.chain,
+                        analysis: result.data.analysis,
+                        nativeToken: result.metadata?.nativeToken || 'ETH'
+                    };
+                    forceUpdate(n => n + 1);
 
-                    // Format response for AI
-                    let response = `✅ Portfolio Analysis Complete (${result.chain}):\n\n`;
-                    const nativeTokenSymbol = result.metadata?.nativeToken || 'ETH';
-                    response += `💰 Native Balance: ${portfolio.nativeBalance.toFixed(4)} ${nativeTokenSymbol}\n`;
-                    response += `💵 Native Value: $${portfolio.nativeValueUSD.toFixed(2)}\n\n`;
-
-                    if (portfolio.numTokens > 0) {
-                        response += `📊 Token Holdings (${portfolio.numTokens} tokens):\n`;
-                        portfolio.tokenHoldings.slice(0, 5).forEach((token: any, i: number) => {
-                            response += `${i + 1}. ${token.tokenSymbol}: ${token.balance.toFixed(4)} tokens\n`;
-                            response += `   Value: $${token.currentValueUSD.toFixed(2)} | P&L: ${token.pnlPercentage > 0 ? '+' : ''}${token.pnlPercentage.toFixed(2)}%\n`;
-                        });
-
-                        response += `\n💼 Total Portfolio: $${portfolio.totalPortfolioValueUSD.toFixed(2)}\n`;
-                        response += `📈 Total P&L: ${portfolio.totalPnLPercentage > 0 ? '+' : ''}${portfolio.totalPnLPercentage.toFixed(2)}%`;
-                    } else {
-                        response += `ℹ️ No ERC-20 tokens found. Only native balance available.`;
-                    }
-
-                    return response;
+                    return `Portfolio analysis rendered above for ${walletAddress}.`;
                 }
 
                 return "Failed to analyze portfolio. Please try again.";
@@ -571,7 +621,27 @@ function ChatPageContent() {
         },
         render: ({ status }) => {
             if (status === "executing") {
-                return <div className="text-sm text-muted-foreground animate-pulse">🔍 Analyzing on-chain portfolio data...</div>;
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-blue-50 rounded-xl border border-blue-100 max-w-sm mt-3 animate-pulse">
+                        <div className="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center">
+                            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                        <span className="text-sm text-blue-700">Analyzing wallet portfolio...</span>
+                    </div>
+                );
+            } else if (status === "complete" && portfolioDataRef.current) {
+                const { analysis, chainName, nativeToken } = portfolioDataRef.current;
+                return (
+                    <PortfolioCard
+                        totalValueUSD={analysis.totalPortfolioValueUSD}
+                        totalPnLPercentage={analysis.totalPnLPercentage}
+                        nativeBalance={analysis.nativeBalance}
+                        nativeToken={nativeToken}
+                        nativeValueUSD={analysis.nativeValueUSD}
+                        tokens={analysis.tokenHoldings}
+                        chainName={chainName}
+                    />
+                );
             }
             return <></>;
         },
@@ -616,30 +686,14 @@ function ChatPageContent() {
                 const { data: result } = await response.json();
 
                 if (result.data.type === 'token_activity') {
-                    const activity = result.data.analysis;
-                    const summary = activity.summary;
+                    // Store for UI
+                    tokenActivityDataRef.current = {
+                        summary: result.data.analysis.summary,
+                        chainName: result.chain
+                    };
+                    forceUpdate(n => n + 1);
 
-                    let response = `✅ Token Activity Analysis (${result.chain}):\n\n`;
-                    response += `📊 Trading Summary:\n`;
-                    response += `• Tokens Bought: ${summary.numTokensBought}\n`;
-                    response += `• Tokens Sold: ${summary.numTokensSold}\n`;
-                    response += `• Total Invested: $${summary.totalInvestedUSD.toFixed(2)}\n`;
-                    response += `• Current Value: $${summary.currentPortfolioValueUSD.toFixed(2)}\n`;
-                    response += `• P&L: ${summary.totalPnLPercentage > 0 ? '+' : ''}${summary.totalPnLPercentage.toFixed(2)}% ($${summary.totalPnL > 0 ? '+' : ''}${summary.totalPnL.toFixed(2)})\n\n`;
-
-                    if (summary.mostProfitableToken) {
-                        const best = summary.mostProfitableToken;
-                        response += `🏆 Most Profitable: ${best.tokenSymbol}\n`;
-                        response += `   P&L: +${best.pnlPercentage.toFixed(2)}% ($${best.pnl.toFixed(2)})\n\n`;
-                    }
-
-                    if (summary.biggestLoserToken && summary.biggestLoserToken.pnl < 0) {
-                        const worst = summary.biggestLoserToken;
-                        response += `📉 Biggest Loss: ${worst.tokenSymbol}\n`;
-                        response += `   P&L: ${worst.pnlPercentage.toFixed(2)}% ($${worst.pnl.toFixed(2)})\n`;
-                    }
-
-                    return response;
+                    return `Trading activity analysis rendered above.`;
                 }
 
                 return "Failed to analyze token activity. Please try again.";
@@ -650,7 +704,21 @@ function ChatPageContent() {
         },
         render: ({ status }) => {
             if (status === "executing") {
-                return <div className="text-sm text-muted-foreground animate-pulse">📊 Analyzing trading history & P&L...</div>;
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-orange-50 rounded-xl border border-orange-100 max-w-sm mt-3 animate-pulse">
+                        <div className="w-8 h-8 rounded-full bg-orange-200 flex items-center justify-center">
+                            <Activity className="w-4 h-4 text-orange-600 animate-pulse" />
+                        </div>
+                        <span className="text-sm text-orange-700">Calculating trading P&L...</span>
+                    </div>
+                );
+            } else if (status === "complete" && tokenActivityDataRef.current) {
+                return (
+                    <TokenActivityCard
+                        summary={tokenActivityDataRef.current.summary}
+                        chainName={tokenActivityDataRef.current.chainName}
+                    />
+                );
             }
             return <></>;
         },
@@ -693,23 +761,14 @@ function ChatPageContent() {
                 const { data: result } = await response.json();
 
                 if (result.data.type === 'transaction_stats') {
-                    const stats = result.data.stats;
+                    // Store for UI
+                    transactionStatsDataRef.current = {
+                        stats: result.data.stats,
+                        chainName: result.chain
+                    };
+                    forceUpdate(n => n + 1);
 
-                    let response = `✅ Transaction Statistics (${result.chain}):\n\n`;
-                    response += `📈 Activity Overview:\n`;
-                    response += `• Total Transactions: ${stats.totalTransactions}\n`;
-                    response += `• Sent: ${stats.transactionsSent} | Received: ${stats.transactionsReceived}\n`;
-                    response += `• Native Txs: ${stats.ethTransactions} | Token Txs: ${stats.erc20Transactions}\n\n`;
-
-                    response += `⛽ Gas Spending:\n`;
-                    response += `• Total Gas Spent: $${stats.totalGasSpentUSD.toFixed(2)}\n`;
-                    response += `• Average per Tx: $${stats.averageGasPerTxUSD.toFixed(4)}\n\n`;
-
-                    response += `📅 Account Info:\n`;
-                    response += `• Account Age: ${stats.accountAgeDays} days\n`;
-                    response += `• Activity Level: ${stats.activityFrequency}\n`;
-
-                    return response;
+                    return `Transaction statistics rendered above.`;
                 }
 
                 return "Failed to get transaction stats. Please try again.";
@@ -720,8 +779,116 @@ function ChatPageContent() {
         },
         render: ({ status }) => {
             if (status === "executing") {
-                return <div className="text-sm text-muted-foreground animate-pulse">⛽ Calculating gas & transaction stats...</div>;
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-gray-50 rounded-xl border border-gray-200 max-w-sm mt-3 animate-pulse">
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                            <Fuel className="w-4 h-4 text-gray-600 animate-pulse" />
+                        </div>
+                        <span className="text-sm text-gray-700">Calculating gas usage...</span>
+                    </div>
+                );
+            } else if (status === "complete" && transactionStatsDataRef.current) {
+                return (
+                    <TransactionStatsCard
+                        stats={transactionStatsDataRef.current.stats}
+                        chainName={transactionStatsDataRef.current.chainName}
+                    />
+                );
             }
+            return <></>;
+        },
+    });
+
+    // ============================================
+    // NEW ACTION 4: Create Payment Link (Chat-Based)
+    // ============================================
+    useCopilotAction({
+        name: "createPaymentLink",
+        description: "Buat payment link. PENTING: Jika parameter amount/token belum ada, JANGAN TANYA di chat. Langsung panggil tool ini agar form input muncul.",
+        parameters: [
+            { name: "amount", type: "number", description: "Jumlah crypto (e.g. 0.1)", required: false },
+            { name: "token", type: "string", description: "Symbol token (ETH, USDC, MNT, dll)", required: false },
+            { name: "network", type: "string", description: "Network blockchain (ethereum, mantle, dll)", required: false },
+            { name: "receiverWallet", type: "string", description: "Wallet penerima (default: wallet user yg connect)", required: false },
+        ],
+        handler: async ({ amount, token, network, receiverWallet }) => {
+            console.log("🔥 createPaymentLink action called!", { amount, token });
+
+            if (!amount || !token) {
+                return "Mohon lengkapi data pembayaran di form berikut.";
+            }
+
+            try {
+                const finalReceiver = receiverWallet || address;
+                if (!finalReceiver) return "Wallet not connected";
+
+                const response = await axios.post('/api/payments/create', {
+                    cryptoAmount: amount,
+                    cryptoCurrency: token || 'ETH',
+                    network: network || 'ethereum',
+                    receiverWallet: finalReceiver
+                });
+
+                if (response.data.success) {
+                    paymentLinkDataRef.current = response.data.data;
+                    forceUpdate(n => n + 1);
+                    return `Payment link berhasil dibuat! ID: ${response.data.data.id}`;
+                }
+                return "Gagal membuat payment link.";
+            } catch (error: any) {
+                console.error("Create payment error:", error);
+                return `Error: ${error.message}`;
+            }
+        },
+        render: ({ status, args }) => {
+            // Case 1: Show Form (If incomplete args/starting)
+            if (status === "executing" && (!args.amount || !args.token)) {
+                return (
+                    <div className="mt-2">
+                        <CreatePaymentForm
+                            defaultValues={{
+                                amount: args.amount,
+                                symbol: args.token,
+                                network: args.network
+                            }}
+                            onSubmit={async (formData: any) => {
+                                const msg = `Buatkan payment link: ${formData.amount} ${formData.token} di network ${formData.network} untuk wallet ${formData.receiverWallet}`;
+                                await appendMessage(
+                                    new TextMessage({
+                                        role: MessageRole.User,
+                                        content: msg,
+                                    })
+                                );
+                            }}
+                        />
+                    </div>
+                );
+            }
+
+            // Case 2: Executing with data
+            if (status === "executing") {
+                return (
+                    <div className="flex items-center gap-2 p-4 bg-gray-900 rounded-xl border border-gray-800 max-w-sm mt-3 animate-pulse">
+                        <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                            <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                        </div>
+                        <span className="text-sm text-gray-300">Generating Payment Link...</span>
+                    </div>
+                );
+            }
+
+            // Case 3: Complete -> Show Result Card
+            if (status === "complete" && paymentLinkDataRef.current) {
+                return (
+                    <div className="mt-2">
+                        <PaymentStatusCard
+                            paymentId={paymentLinkDataRef.current.id}
+                            initialData={paymentLinkDataRef.current}
+                        />
+                    </div>
+                );
+            }
+
             return <></>;
         },
     });
@@ -778,37 +945,43 @@ function ChatPageContent() {
     }
 
     return (
-        <div className="h-screen flex flex-col bg-background">
-            <ChatHeader
-                sidebarOpen={sidebarOpen}
-                onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-            />
+        <div className="h-screen flex bg-background">
+            {/* Sidebar on the Left */}
+            <TokenSidebar isOpen={sidebarOpen} />
 
-            <div className="flex-1 flex overflow-hidden min-h-0">
-                {/* Your Custom Sidebar - TETAP */}
-                <TokenSidebar isOpen={sidebarOpen} />
+            {/* Main Content Area (Header + Chat) on the Right */}
+            <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden">
+                <ChatHeader
+                    sidebarOpen={sidebarOpen}
+                    onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+                />
 
-                {/* CopilotKit Chat UI */}
-                <main className="flex-1 flex flex-col min-h-0 h-full relative">
+                {/* Chat Container */}
+                <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden">
                     {/* Welcome Screen with Input */}
                     {showWelcome ? (
                         <div className="flex-1 flex flex-col">
-                            {/* Chat Status Header */}
-                            <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
-                                Right now you&apos;re in chat with Nova AI
-                            </div>
 
                             {/* Welcome Screen Content */}
                             <div className="flex-1 flex items-center justify-center overflow-auto">
                                 <WelcomeScreen
                                     onActionClick={(action) => {
                                         const actionMessages: Record<string, string> = {
-                                            send: "Saya ingin mengirim crypto",
-                                            receive: "Tampilkan alamat wallet saya",
-                                            swap: "Saya ingin swap token",
-                                            paylink: "Buat payment link"
+                                            send: "Prepare a transaction",
+                                            receive: "Show my wallet address",
+                                            swap: "I want to swap tokens",
+                                            paylink: "Create a payment link",
+                                            portfolio: "Analyze my portfolio",
+                                            search: "Search onchain activity", // This might need a form too, but for now text
+                                            slippage: "Predict trade slippage"
                                         };
-                                        setInputValue(actionMessages[action]);
+                                        const msg = actionMessages[action] || "";
+
+                                        // Immediately send the message
+                                        setInputValue("");
+                                        setShowWelcome(false);
+                                        setHasStartedChat(true);
+                                        setPendingMessage(msg);
                                     }}
                                 />
                             </div>
@@ -818,7 +991,7 @@ function ChatPageContent() {
                                 <form
                                     onSubmit={async (e) => {
                                         e.preventDefault();
-                                        if (inputValue.trim()) {
+                                        if (inputValue?.trim()) {
                                             const message = inputValue.trim();
                                             setInputValue("");
                                             setShowWelcome(false);
@@ -834,7 +1007,7 @@ function ChatPageContent() {
                                         {/* Input Field */}
                                         <input
                                             type="text"
-                                            value={inputValue}
+                                            value={inputValue || ""}
                                             onChange={(e) => setInputValue(e.target.value)}
                                             placeholder="Ask Nova AI about your wallet, markets, or transactions..."
                                             className="flex-1 bg-transparent border-none outline-none text-sm text-gray-800 placeholder-gray-500"
@@ -843,7 +1016,7 @@ function ChatPageContent() {
                                         {/* Send Button */}
                                         <button
                                             type="submit"
-                                            disabled={!inputValue.trim()}
+                                            disabled={!inputValue?.trim()}
                                             className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-r from-purple-500 to-violet-600 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shadow-md"
                                         >
                                             <Send className="w-4 h-4 text-white" />
@@ -854,10 +1027,6 @@ function ChatPageContent() {
                         </div>
                     ) : (
                         <>
-                            {/* Chat Status Header */}
-                            <div className="flex-shrink-0 text-center py-3 text-gray-400 text-sm border-b border-gray-100">
-                                Right now you&apos;re in chat with Nova AI
-                            </div>
 
                             {/* CopilotChat - Only shown after welcome */}
                             <div className="flex-1 min-h-0 h-full overflow-hidden">

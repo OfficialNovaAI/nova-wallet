@@ -217,8 +217,8 @@ class MantleSepoliaClient implements BlockchainClient {
 class LiskSepoliaClient implements BlockchainClient {
     readonly chainName = 'Lisk Sepolia';
     readonly nativeToken = 'LSK';
-    readonly apiUrl = 'https://sepolia-blockscout.lisk.com/api';
-    readonly rpcUrl = 'https://rpc.sepolia-api.lisk.com';
+    readonly apiUrl = process.env.LISK_SEPOLIA_BLOCKSCOUT_URL || 'https://sepolia-blockscout.lisk.com/api';
+    readonly rpcUrl = process.env.LISK_SEPOLIA_RPC_URL || 'https://rpc.sepolia-api.lisk.com';
     readonly blockTimeSeconds = 2;
 
     private readonly maxRecords = 1000;
@@ -242,7 +242,17 @@ class LiskSepoliaClient implements BlockchainClient {
             const erc20Txs = await this.fetchAllPages('tokentx', address);
 
             // Get Real Balance from RPC
-            const realBalanceWei = await getRpcBalance(this.rpcUrl, address);
+            let realBalanceWei = BigInt(0);
+            try {
+                realBalanceWei = await getRpcBalance(this.rpcUrl, address);
+            } catch (err: any) {
+                console.warn(`[Lisk] ⚠️ RPC Balance fetch failed from ${this.rpcUrl}:`, err.message);
+                // Try fallback to public RPC if private fails
+                if (this.rpcUrl !== 'https://rpc.sepolia-api.lisk.com') {
+                    console.log('[Lisk] 🔄 Retrying with public RPC...');
+                    realBalanceWei = await getRpcBalance('https://rpc.sepolia-api.lisk.com', address);
+                }
+            }
 
             const allTxs: Transaction[] = [];
             let historyBalanceWei = BigInt(0);
@@ -339,6 +349,21 @@ class LiskSepoliaClient implements BlockchainClient {
     }
 
     async getTokenMetadata(tokenAddress: string): Promise<TokenInfo> {
+        try {
+            const url = `${this.apiUrl}?module=token&action=getToken&contractaddress=${tokenAddress}`;
+            const data = await httpClient.get<any>(url, { headers: BROWSER_HEADERS });
+
+            if (data.status === '1' && data.result) {
+                return {
+                    symbol: data.result.symbol || 'UNKNOWN',
+                    decimals: parseInt(data.result.decimals || '18'),
+                    name: data.result.tokenName || 'Unknown Token',
+                    address: tokenAddress.toLowerCase()
+                };
+            }
+        } catch (error) {
+            console.warn(`[Lisk] Failed to fetch metadata for ${tokenAddress}`, error);
+        }
         return { symbol: 'TOKEN', decimals: 18, name: 'Unknown Token', address: tokenAddress.toLowerCase() };
     }
 
@@ -486,41 +511,41 @@ class LiskMainnetClient implements BlockchainClient {
 // --- Factory ---
 
 export function getBlockchainClient(chainId: number): BlockchainClient {
-  const cryptocompareApiKey = process.env.CRYPTOCOMPARE_API_KEY || 'demo';
-  const etherscanApiKey = process.env.ETHERSCAN_API_KEY || '';
-  const moralisApiKey = process.env.MORALIS_API_KEY;
+    const cryptocompareApiKey = process.env.CRYPTOCOMPARE_API_KEY || 'demo';
+    const etherscanApiKey = process.env.ETHERSCAN_API_KEY || '';
+    const moralisApiKey = process.env.MORALIS_API_KEY;
 
-  switch (chainId) {
-    // ===== ETHEREUM =====
-    case 1: // Ethereum Mainnet
-      return new EthereumClient({
-        etherscanApiKey,
-        moralisApiKey,
-        cryptocompareApiKey,
-        maxTransactionsPerAddress: 500
-      });
-    
-    case 11155111: // Ethereum Sepolia (Testnet)
-      return new EthereumSepoliaClient({ etherscanApiKey, cryptocompareApiKey });
+    switch (chainId) {
+        // ===== ETHEREUM =====
+        case 1: // Ethereum Mainnet
+            return new EthereumClient({
+                etherscanApiKey,
+                moralisApiKey,
+                cryptocompareApiKey,
+                maxTransactionsPerAddress: 500
+            });
 
-    // ===== MANTLE =====
-    case 5000: // Mantle Mainnet
-      return new MantleMainnetClient({ cryptocompareApiKey });
-    
-    case 5003: // Mantle Sepolia (Testnet)
-      return new MantleSepoliaClient({ cryptocompareApiKey });
+        case 11155111: // Ethereum Sepolia (Testnet)
+            return new EthereumSepoliaClient({ etherscanApiKey, cryptocompareApiKey });
 
-    // ===== LISK =====
-    case 1135: // Lisk Mainnet
-      return new LiskMainnetClient({ cryptocompareApiKey });
-    
-    case 4202: // Lisk Sepolia (Testnet)
-      return new LiskSepoliaClient({ cryptocompareApiKey });
+        // ===== MANTLE =====
+        case 5000: // Mantle Mainnet
+            return new MantleMainnetClient({ cryptocompareApiKey });
 
-    default:
-      console.warn(`[Wrapper] Unsupported Chain ID ${chainId}. Defaulting to Mantle Sepolia testnet.`);
-      return new MantleSepoliaClient({ cryptocompareApiKey });
-  }
+        case 5003: // Mantle Sepolia (Testnet)
+            return new MantleSepoliaClient({ cryptocompareApiKey });
+
+        // ===== LISK =====
+        case 1135: // Lisk Mainnet
+            return new LiskMainnetClient({ cryptocompareApiKey });
+
+        case 4202: // Lisk Sepolia (Testnet)
+            return new LiskSepoliaClient({ cryptocompareApiKey });
+
+        default:
+            console.warn(`[Wrapper] Unsupported Chain ID ${chainId}. Defaulting to Mantle Sepolia testnet.`);
+            return new MantleSepoliaClient({ cryptocompareApiKey });
+    }
 }
 
 // --- Orchestrator Helpers ---
