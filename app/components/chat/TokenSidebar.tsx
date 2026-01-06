@@ -7,18 +7,13 @@ import { cn } from "@/lib/utils";
 import { supportedChains } from "@/config/chains";
 import Image from "next/image";
 
-// Filter to only show Lisk, Mantle, and ETH Sepolia
-const focusedChains = supportedChains.filter(chain =>
-  chain.name === 'Lisk Sepolia' ||
-  chain.name === 'Mantle Sepolia' ||
-  chain.name === 'ETH Sepolia'
-);
-
 // Token logo mapping
 const tokenLogos: Record<string, string> = {
   'ETH': '/eth.svg',
   'MNT': '/mantle.svg',
   'LSK': '/lisk.svg',
+  'MATIC': '/polygon.svg', // New logo for Polygon
+  'POL': '/polygon.svg',
 };
 
 interface TokenBalance {
@@ -51,7 +46,8 @@ export const TokenSidebar = ({ isOpen }: TokenSidebarProps) => {
 
       setIsLoading(true);
       try {
-        const balancePromises = focusedChains.map(async (chain) => {
+        // Use ALL supported chains (Mainnet + Testnets)
+        const balancePromises = supportedChains.map(async (chain) => {
           try {
             const response = await fetch("/api/wallet/balance", {
               method: "POST",
