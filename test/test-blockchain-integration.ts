@@ -1,11 +1,11 @@
 // nova-wallet/test-blockchain-integration.ts
 // Quick test to verify blockchain agent is working
 
-import { 
-    getPortfolioAnalysis, 
-    getTokenActivity, 
-    getTransactionStats 
-} from './app/lib/blockchainAgentWrapper';
+import {
+    getPortfolioAnalysis,
+    getTokenActivity,
+    getTransactionStats
+} from '../app/lib/blockchainAgentWrapper';
 
 async function testBlockchainIntegration() {
     console.log('\n╔═══════════════════════════════════════════════════════╗');
@@ -26,12 +26,12 @@ async function testBlockchainIntegration() {
     try {
         console.log('Fetching transaction stats...');
         const stats = await getTransactionStats(testAddress, testChainId);
-        
+
         console.log('✅ SUCCESS!');
         console.log(`   Chain: ${stats.chain}`);
         console.log(`   Transactions: ${stats.transactionsAnalyzed}`);
         console.log(`   Processing time: ${stats.processingTimeMs}ms`);
-        
+
         if (stats.data.type === 'transaction_stats') {
             const s = stats.data.stats;
             console.log(`   Total transactions: ${s.totalTransactions}`);
@@ -46,11 +46,11 @@ async function testBlockchainIntegration() {
     try {
         console.log('Fetching portfolio...');
         const portfolio = await getPortfolioAnalysis(testAddress, testChainId);
-        
+
         console.log('✅ SUCCESS!');
         console.log(`   Chain: ${portfolio.chain}`);
         console.log(`   Processing time: ${portfolio.processingTimeMs}ms`);
-        
+
         if (portfolio.data.type === 'portfolio') {
             const p = portfolio.data.analysis;
             console.log(`   Native balance: ${p.nativeBalance.toFixed(4)} ETH`);
@@ -65,11 +65,11 @@ async function testBlockchainIntegration() {
     try {
         console.log('Fetching token activity (last 30 days)...');
         const activity = await getTokenActivity(testAddress, testChainId, 30);
-        
+
         console.log('✅ SUCCESS!');
         console.log(`   Chain: ${activity.chain}`);
         console.log(`   Processing time: ${activity.processingTimeMs}ms`);
-        
+
         if (activity.data.type === 'token_activity') {
             const a = activity.data.analysis;
             console.log(`   Tokens bought: ${a.summary.numTokensBought}`);
@@ -85,7 +85,7 @@ async function testBlockchainIntegration() {
     console.log('\n╔═══════════════════════════════════════════════════════╗');
     console.log('║  TEST COMPLETE!                                      ║');
     console.log('╚═══════════════════════════════════════════════════════╝\n');
-    
+
     console.log('📝 Next Steps:');
     console.log('   1. If all tests passed: Integration is working! ✅');
     console.log('   2. Start the dev server: npm run dev');
