@@ -2,6 +2,7 @@
 import { motion } from "framer-motion";
 import { Zap } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 export const Hero = () => {
   return (
@@ -24,41 +25,21 @@ export const Hero = () => {
         </div>
       </div>
 
-      {/* Floating 3D Icons */}
-      <div className="absolute right-20 top-32 hidden lg:block">
+      {/* Hero Decoration Image */}
+      <div className="absolute right-0 top-52 hidden lg:block">
         <motion.div
-          initial={{ y: 0, rotate: 0 }}
-          animate={{ y: [-10, 10, -10], rotate: [0, 5, -5, 0] }}
-          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-          className="relative"
+          initial={{ opacity: 0, x: 100 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 1, ease: "easeOut" }}
+          className="relative w-[600px] h-[400px]"
         >
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-2xl shadow-purple-500/50">
-            <Zap className="w-8 h-8 text-white" />
-          </div>
-        </motion.div>
-      </div>
-
-      <div className="absolute right-40 top-48 hidden lg:block">
-        <motion.div
-          initial={{ y: 0 }}
-          animate={{ y: [10, -10, 10] }}
-          transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-        >
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 to-violet-800 flex items-center justify-center shadow-2xl shadow-purple-600/40 rotate-12">
-            <Zap className="w-7 h-7 text-white" />
-          </div>
-        </motion.div>
-      </div>
-
-      <div className="absolute right-60 top-24 hidden lg:block">
-        <motion.div
-          initial={{ y: 0 }}
-          animate={{ y: [-8, 12, -8] }}
-          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-        >
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center shadow-xl shadow-purple-400/30 -rotate-12">
-            <Zap className="w-6 h-6 text-white" />
-          </div>
+          <Image
+            src="/hero-decoration.png"
+            alt="Hero Decoration"
+            fill
+            className="object-contain object-right-top"
+            priority
+          />
         </motion.div>
       </div>
 
@@ -71,16 +52,16 @@ export const Hero = () => {
             transition={{ duration: 0.8 }}
             className="mb-8"
           >
-            <span className="block text-5xl md:text-7xl font-black tracking-tight text-white/90 mb-2" style={{ fontFamily: 'system-ui' }}>
+            <span className="block text-5xl md:text-[70px] font-normal text-white/90 mb-2" style={{ fontFamily: 'var(--font-bruno-ace)', lineHeight: '100%', letterSpacing: '-0.02em' }}>
               AI-POWERED
             </span>
-            <span className="block text-5xl md:text-7xl font-black tracking-tight text-white/90 flex items-center gap-3">
+            <span className="block text-5xl md:text-[70px] font-normal text-white/90 flex items-center gap-3" style={{ fontFamily: 'var(--font-bruno-ace)', lineHeight: '100%', letterSpacing: '-0.02em' }}>
               CRYPTO
               <span className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 shadow-lg shadow-purple-500/30">
                 <Zap className="w-8 h-8 text-white" />
               </span>
             </span>
-            <span className="block text-5xl md:text-7xl font-black tracking-tight text-white/90">
+            <span className="block text-5xl md:text-[70px] font-normal text-white/90" style={{ fontFamily: 'var(--font-bruno-ace)', lineHeight: '100%', letterSpacing: '-0.02em' }}>
               SUPERWALLET
             </span>
           </motion.h1>
