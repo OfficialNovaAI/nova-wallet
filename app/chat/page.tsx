@@ -310,21 +310,8 @@ function ChatPageContent() {
                         }}
                         onConfirm={async () => {
                             try {
-                                // 1. Check if we need to switch chain
-                                if (chainId !== targetChainId && targetChainId) {
-                                    toast.loading(`Switching to ${networkName}...`);
-                                    try {
-                                        await switchChainAsync({ chainId: targetChainId });
-                                        toast.dismiss();
-                                        toast.success(`Switched to ${networkName}`);
-                                    } catch (switchError) {
-                                        toast.dismiss();
-                                        toast.error("Failed to switch network");
-                                        return;
-                                    }
-                                }
-
-                                // 2. Send Transaction
+                                // Chain is already switched in prepareTransaction handler
+                                // Send Transaction directly
                                 sendTransaction({
                                     to: args.recipient as `0x${string}`,
                                     value: parseEther(args.amount),
@@ -370,6 +357,20 @@ function ChatPageContent() {
             // Validate Chain
             const chainInfo = supportedChains.find(c => c.id === targetChainId);
             const chainName = chainInfo?.name || `Chain ID ${targetChainId}`;
+
+            // NEW: Switch chain BEFORE preparing transaction
+            if (chainId !== targetChainId && targetChainId) {
+                toast.loading(`Switching to ${chainName}...`);
+                try {
+                    await switchChainAsync({ chainId: targetChainId });
+                    toast.dismiss();
+                    toast.success(`Switched to ${chainName}`);
+                } catch (switchError) {
+                    toast.dismiss();
+                    toast.error("Failed to switch network");
+                    return `Failed to switch to ${chainName}. Please switch to ${chainName} manually and try again.`;
+                }
+            }
 
             return `Transaction prepared: Sending ${amount} ${chainInfo?.symbol || 'tokens'} to ${recipient} on ${chainName}. Please confirm in the card above.`;
         },
