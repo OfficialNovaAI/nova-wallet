@@ -24,6 +24,7 @@ import { CopilotKit, useCopilotAction, useCopilotChat } from "@copilotkit/react-
 import { CopilotChat } from "@copilotkit/react-ui";
 import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import "@copilotkit/react-ui/styles.css";
+import { NOVA_SYSTEM_PROMPT } from "@/lib/systemPrompt";
 
 // New Generative UI Components
 import { PortfolioCard } from "@/components/chat/PortfolioCard";
@@ -57,7 +58,9 @@ function ChatPageContent() {
     const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
     // useCopilotChat for programmatic message sending
-    const { appendMessage } = useCopilotChat();
+    const { appendMessage } = useCopilotChat({
+        makeSystemMessage: (context) => NOVA_SYSTEM_PROMPT
+    });
 
     // State to store balance data for Generative UI
     const [balanceData, setBalanceData] = useState<{
