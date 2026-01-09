@@ -2,6 +2,30 @@
 import { useState, useCallback } from "react";
 import { useAccount, useBalance } from "wagmi";
 
+
+export interface TransactionStep {
+  step: string;
+  label: string;
+  status: "pending" | "active" | "completed" | "error";
+  message?: string;
+}
+
+export interface TransactionFlow {
+  id: string;
+  type: "send" | "swap" | "receive";
+  status: "active" | "completed" | "failed";
+  currentStep: string; // ID of the current active step
+  steps: TransactionStep[];
+  data: {
+    amount?: string;
+    token?: string;
+    recipient?: string;
+    fromToken?: string;
+    toToken?: string;
+    [key: string]: any;
+  };
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";

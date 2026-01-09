@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "set NEXT_DISABLE_TURBOPACK=1 && next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:integration": "ts-node --project tsconfig.test.json -r tsconfig-paths/register test/test-blockchain-integration.ts"
   },
   "dependencies": {
     "@copilotkit/react-core": "^1.49.1",
@@ -95,6 +96,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.38.0"
   }

@@ -156,6 +156,30 @@
    box-shadow: 0px 20px 25px -5px #4B39B333;
    border-radius: 16px;
   }
+
+  /** FEATURE **/
+  .get-to-know-nova-wallet-more {
+    box-shadow: 0px 1px 3px 0px #0000001A;
+    box-shadow: 0px -1px 0px 0px #3E318A inset;
+    box-shadow: 0px 1px 0.75px 0px #FFFFFF1F inset;
+    box-shadow: 0px 0px 0px 1px #423493;
+    background: #100C27;
+  }
+
+  .card {
+    box-shadow: 0px 0px 0px 1px #423493;
+    box-shadow: 0px 4.07px 2px -3.05px #0000000D;
+    box-shadow: 0px 10.18px 12.72px -2.54px #0000000D;
+  }
+
+  /** NAVBAR **/
+  .navbar {
+    background: linear-gradient(180deg, #5543BC 0%, #786BC7 100%);
+    box-shadow: 0px 1px 3px 0px #0000001A;
+    box-shadow: 0px -1px 0px 0px #3E318A inset;
+    box-shadow: 0px 1px 0.75px 0px #FFFFFF1F inset;
+    box-shadow: 0px 0px 0px 1px #423493; 
+  }
 }
 
 * {
