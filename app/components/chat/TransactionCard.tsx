@@ -115,13 +115,14 @@ export const TransactionCard = (props: TransactionCardProps) => {
   }
 
   if (props.type === "receive") {
+    console.log("🔥 Rendering receive card with address:", props.data.address); // DEBUG
     return (
-      <div className="bg-card rounded-2xl border border-border p-6 max-w-sm mt-3">
-        <h3 className="text-lg font-semibold text-center mb-6">Receive {props.data.token}</h3>
+      <div className="bg-white rounded-2xl border border-gray-200 p-6 max-w-sm mt-3 shadow-lg">
+        <h3 className="text-lg font-semibold text-center mb-6 text-gray-900">Receive {props.data.token}</h3>
 
         <div className="flex flex-col items-center">
           {/* QR Code */}
-          <div className="w-48 h-48 bg-white rounded-xl flex items-center justify-center mb-4 p-4">
+          <div className="w-48 h-48 bg-white rounded-xl border border-gray-200 flex items-center justify-center mb-4 p-4 shadow-sm">
             <QRCodeSVG
               value={props.data.address}
               size={176}
@@ -131,14 +132,14 @@ export const TransactionCard = (props: TransactionCardProps) => {
           </div>
 
           {/* Address with copy button */}
-          <div className="w-full bg-muted rounded-lg p-3 mb-4">
-            <p className="text-xs font-mono text-center break-all mb-2">
+          <div className="w-full bg-gray-100 rounded-lg p-3 mb-4">
+            <p className="text-xs font-mono text-center break-all mb-2 text-gray-800">
               {props.data.address}
             </p>
             <Button
               variant="ghost"
               size="sm"
-              className="w-full"
+              className="w-full hover:bg-gray-200"
               onClick={() => handleCopy(props.data.address)}
             >
               {copied ? (
