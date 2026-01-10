@@ -1,4 +1,4 @@
-# ⚡ Nova AI: The Intelligent Orchestrator for Lisk
+# ⚡ Nova AI: The Intelligent Orchestrator for Your Crypto Wallets
 
 > **"The AI Brain for Your Crypto Wallets. Chat, Transact, and Onboard Users Instantly on Lisk."**
 
@@ -8,7 +8,7 @@
 
 Nova AI addresses the urgent friction points preventing mass adoption on Lisk and the broader Web3 ecosystem:
 
-* **Complex UX Barrier:** Traditional wallets require technical knowledge (chains, gas, RPCs). Users want to express *intents* ("Send money to Mom"), not execute *commands*.
+* **Complex UX Barrier:** Traditional wallets require technical knowledge (chains, gas, RPCs). Users want to express *intents* ("Send money to 0x..."), not execute *commands*.
 * **On-Ramp Friction in Emerging Markets:** Freelancers and businesses in regions like Indonesia struggle to receive crypto payments from non-crypto clients due to complex exchange processes.
 * **Fragmented Data:** Users suffer from "Tab Fatigue"—switching between Wallet, Etherscan, and Gas Trackers just to make one informed decision.
 
@@ -24,31 +24,27 @@ Nova AI is **not a new wallet**. It is an intelligent interface layer that sits 
 
 ## 💎 Key Features
 
-We have built a suite of AI-powered modules designed for Real-World Utility.
+We have built a suite of AI-powered modules designed for Real-World Utility, grouping 6 core capabilities into a unified experience.
 
-### 1. Nova Conversational Interface (Chat-to-Transact)
+### 1. Conversational Asset Management (Send & Receive)
 
-The core of Nova AI is a chat-first interface powered by LLMs. Instead of navigating complex menus, users simply "chat" with their assets. The AI interprets intents, constructs transactions, and presents a clear preview card for user approval.
-
-* **Natural Language Execution:** Type "Send 10 LSK to 0x489..." or "Check my portfolio balance," and Nova executes it instantly.
-* **Wallet Agnostic:** Works as an orchestrator for your existing MetaMask or EVM wallets.
-* **Context-Aware:** The AI understands context (e.g., distinguishing between "Testnet" and "Mainnet" requests).
+The core of Nova AI is a chat-first interface. Instead of navigating menus, simply express your intent.
+* **Send Instantly:** Type *"Send 10 LSK to 0x...."* and Nova constructs the transaction.
+* **Easy Receive:** Ask *"Show my address"* or *"Receive assets"* to instantly generate your QR code and wallet details.
+* **Wallet Agnostic:** Acts as an orchestrator for your existing MetaMask or EVM wallets.
 
 ### 2. Nova Paylink (Fiat-to-Crypto Bridge)
 
-A "Real World Utility" feature designed for the gig economy. Nova Paylink enables users to create invoices/payment links that accept Fiat but settle in Crypto on Lisk.
+A "Real World Utility" feature designed for the gig economy.
+* **Create Invoices:** Generate a payment link via chat command: *"Create paylink for 0.002 eth"*.
+* **Global Settlement:** Integrated with **Transak** & **Midtrans**, allowing clients to pay in Fiat (IDR/USD) while you receive Crypto (USDT/LSK) directly.
 
-* **Global & Local Rails:** Integrated with **Transak** (Global Cards) and **Midtrans** (Indonesian QRIS/Bank Transfer).
-* **Seamless Settlement:** Clients pay in IDR/USD, and the freelancer receives USDT or LSK directly in their wallet.
-* **Instant Generation:** Create a payment link via chat command: *"Create paylink for 0.00000000001 eth"*.
+### 3. Onchain Intelligence & Forecast
 
-### 3. Predictive Insights & Portfolio Aggregation
-
-Nova AI doesn't just execute; it informs. Before any action, our agents analyze on-chain data to ensure users make optimal decisions.
-
-* **Smart Gas Prediction:** AI analyzes network congestion on Lisk to recommend the best time to transact.
-* **Multi-Chain Portfolio:** Aggregates balances across Lisk and other EVM chains in a single view, eliminating the need to check multiple explorers.
-* **Transaction Simulation:** Prevents errors by showing a human-readable summary of what will happen before you sign.
+Nova AI doesn't just execute; it analyzes data to protect you.
+* **Multi-Chain Portfolio:** Aggregates balances across Lisk and other EVM chains in a single view.
+* **Onchain Search:** Ask questions like *"Check activity for address 0x..."* to understand wallet behaviors instantly.
+* **Predict Slippage & Fees:** Before you confirm, AI analyzes market depth and network congestion to predict slippage and gas fees, preventing failed txs or overpayment.
 
 ---
 
@@ -72,7 +68,7 @@ Nova AI operates on a **"Hexa-Core Agent System"** powered by CopilotKit and Lis
 
 We are building Nova AI with a clear path toward becoming the "Super App" for Lisk interaction.
 
-![Nova AI Roadmap](https://cdn.jsdelivr.net/gh/OfficialNovaAI/asset@main/roadmap.png)
+![Nova AI Roadmap](https://github.com/OfficialNovaAI/asset/blob/main/roadmap.png?raw=true)
 
 ---
 
