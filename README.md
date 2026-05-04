@@ -1,8 +1,10 @@
 # Nova AI Wallet
 
-> ChatGPT-style wallet orchestration for crypto: chat, analyze, transact, and accept fiat payments without forcing users through complex wallet menus.
+> An **AI Agent for crypto wallet workflows**: chat, analyze, transact, and accept fiat payments without forcing users through complex wallet menus.
 
-Nova AI Wallet is **not a new wallet**. It is an intelligent interface layer that sits on top of existing wallets such as MetaMask and WalletConnect-compatible EVM wallets. The product is Lisk-first, while the codebase already explores a broader multi-chain experience across Ethereum, Mantle, Polygon, Optimism, Arbitrum, Base, and testnets.
+Nova AI Wallet is **not a new wallet** and not just a chatbot. It is an **agentic wallet orchestration layer** that sits on top of existing wallets such as MetaMask and WalletConnect-compatible EVM wallets. The agent understands user intent, chooses the right tool, fetches real wallet/on-chain/payment data, prepares safe next actions, and leaves final transaction signing to the connected wallet.
+
+The product is Lisk-first, while the codebase already explores a broader multi-chain experience across Ethereum, Mantle, Polygon, Optimism, Arbitrum, Base, and testnets.
 
 ## Awards
 
@@ -14,6 +16,40 @@ Nova AI Wallet was recognized in the SEA Lisk Builders Challenge 3 and won two c
 ![Nova AI Wallet Winner](./docs/assets/readme/winner.jpg)
 
 ![Nova AI Solution Overview](./docs/assets/readme/solution-overview.png)
+
+## AI Agent Evidence
+
+Nova was developed as an AI agent because it can reason over user intent, call tools, use external data, and prepare actions with guardrails. It is designed around an agent loop:
+
+```mermaid
+flowchart TD
+    A["Natural-language user prompt"] --> B["Intent understanding"]
+    B --> C["Tool / action selection"]
+    C --> D["Live wallet, on-chain, payment, or cost data"]
+    D --> E["Smart response, card, or form"]
+    E --> F["User confirmation"]
+    F --> G["Wallet signing / payment flow"]
+```
+
+Agent capabilities implemented in this repository:
+
+- **Intent understanding:** maps natural-language prompts into wallet actions such as balance checks, transfers, swaps, and analysis.
+- **Tool use:** calls balance, portfolio, token activity, whale activity, counterparty, payment, and cost prediction tools.
+- **Live data grounding:** fetches blockchain, wallet, payment, and price/cost data before answering.
+- **Generative UI:** returns smart cards, forms, and transaction previews instead of only plain text.
+- **Human-in-the-loop safety:** prepares transactions but never signs or executes without explicit wallet confirmation.
+
+Implementation evidence:
+
+| Agent capability | Evidence in code |
+|---|---|
+| Intent parser | [`app/lib/intentParser.ts`](./app/lib/intentParser.ts) |
+| CopilotKit tool/actions layer | [`app/chat/actions/useNovaActions.tsx`](./app/chat/actions/useNovaActions.tsx) |
+| Manual LLM tool-calling route | [`app/api/ai/chat/route.ts`](./app/api/ai/chat/route.ts) |
+| Copilot runtime endpoint | [`app/api/copilotkit/route.ts`](./app/api/copilotkit/route.ts) |
+| On-chain analysis tools | [`app/lib/blockchainAgentWrapper.ts`](./app/lib/blockchainAgentWrapper.ts), [`app/lib/blockchain/aggregators`](./app/lib/blockchain/aggregators) |
+| Wallet and transaction UX | [`app/chat/page.tsx`](./app/chat/page.tsx), [`app/components/chat`](./app/components/chat) |
+| Fiat-to-crypto payment tools | [`app/lib/services/payment.service.ts`](./app/lib/services/payment.service.ts), [`app/lib/services/midtrans.service.ts`](./app/lib/services/midtrans.service.ts), [`app/lib/services/transak.service.ts`](./app/lib/services/transak.service.ts) |
 
 ## Why Nova
 
@@ -27,13 +63,13 @@ The core problem:
 - **Transaction costs are unclear.** Gas, route quality, fees, and slippage often appear too late.
 - **Crypto payments are still hard for non-crypto clients.** Freelancers can receive crypto, but clients may only want to pay with fiat rails.
 
-Nova's answer is simple: **chat first, smart cards second, wallet signing only after explicit confirmation.**
+Nova's answer is simple: **an AI agent first, smart cards second, wallet signing only after explicit confirmation.**
 
 ## Core Features
 
-### 1. Conversational Wallet Interface
+### 1. AI Agent Wallet Interface
 
-Users can ask Nova to check balances, explain concepts, prepare transactions, or analyze wallet activity in plain language.
+Users can ask Nova to check balances, explain concepts, prepare transactions, or analyze wallet activity in plain language. Nova behaves like a crypto workflow agent: it chooses the right action, fetches the required data, and returns a safe next step.
 
 Example prompts:
 
@@ -84,19 +120,19 @@ Buat paylink 0.1 ETH
 
 Nova opens a payment form, creates the payment request, and shows a payment status card.
 
-## Product Architecture
+## AI Agent Architecture
 
-Nova uses a chat-first architecture where the AI layer chooses the right action, fetches real blockchain or payment data, and returns a human-readable answer or UI card.
+Nova uses a chat-first agent architecture where the AI layer chooses the right action, fetches real blockchain or payment data, and returns a human-readable answer or UI card.
 
 ![System Architecture Diagram](./docs/assets/readme/system-architecture.jpeg)
 
 How the flow works:
 
 1. **User prompt:** The user asks a natural-language question or command.
-2. **Intent routing:** Nova determines whether the user wants balance, portfolio, payment, cost prediction, or transaction preparation.
-3. **Tool/API call:** The app fetches wallet, chain, payment, or prediction data.
+2. **Agent reasoning:** Nova classifies intent and decides which capability is needed.
+3. **Tool/API call:** The agent fetches wallet, chain, payment, or prediction data.
 4. **Smart response:** Nova renders the result as chat text, cards, forms, or transaction previews.
-5. **Wallet confirmation:** Transactions are never executed without explicit user confirmation through the connected wallet.
+5. **Human approval:** Transactions are never executed without explicit user confirmation through the connected wallet.
 
 ![How Nova Works](./docs/assets/readme/how-it-works.png)
 
@@ -104,7 +140,7 @@ How the flow works:
 
 - **Frontend:** Next.js App Router, React, Tailwind CSS, Radix UI, shadcn-style components
 - **Wallet:** Wagmi, Viem, RainbowKit, WalletConnect
-- **AI:** CopilotKit, Gemini-based chat route, custom intent parsing
+- **AI Agent:** CopilotKit actions, Gemini-based tool-calling route, custom intent parsing, generative UI cards
 - **Blockchain:** RPC reads, Etherscan/Blockscout-style clients, custom on-chain aggregators
 - **Payments:** Prisma, PostgreSQL, Midtrans QRIS, Transak
 - **Utilities:** Zod, Axios, Upstash rate limiting, Recharts
@@ -141,7 +177,7 @@ Nova: Menampilkan status pembayaran sampai selesai.
 
 ## Roadmap
 
-Nova is being shaped into a wallet super-app experience: first as a chat interface, then as an intelligence layer, and eventually as an automation layer for crypto workflows.
+Nova is being shaped into an AI agent wallet experience: first as a chat-to-action interface, then as an intelligence layer, and eventually as an automation layer for crypto workflows.
 
 ![Nova AI Roadmap](./docs/assets/readme/roadmap.png)
 
@@ -170,6 +206,6 @@ For production-style flows, configure the required environment variables for dat
 
 Nova's strongest product direction is:
 
-> **An AI wallet assistant for users who want to understand and act on crypto without opening five different tools first.**
+> **An AI Agent for users who want to understand and act on crypto without opening five different tools first.**
 
 The most important next polish areas are payment reliability, clearer production/demo separation, faster on-chain analysis, and tighter README/demo assets.
